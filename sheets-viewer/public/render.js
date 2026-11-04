@@ -380,7 +380,7 @@ function escapeHtml(value){return String(value).replace(/[&<>"']/g,c=>({'&':'&am
         return withoutCodeFence;
       }
 
-      if (CONFIG.allowRawHtml && /<(head|body|main|section|div|h1|p|style|script|img|a)[\s>]/i.test(withoutCodeFence)) {
+      if (CONFIG.allowRawHtml && /^(?:<!--[\s\S]*?-->\s*)*<[a-z][a-z0-9:-]*(?:\s|\/?>)/i.test(withoutCodeFence)) {
         return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title></title></head><body>${withoutCodeFence}</body></html>`;
       }
 

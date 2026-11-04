@@ -17,9 +17,9 @@ test('A1 rejects invalid IDs and Google login responses',async()=>{
   try{assert.equal((await onRequestGet({request:new Request('https://sheets.built.at/A1?id=bad')})).status,400);const r=await onRequestGet({request:new Request('https://sheets.built.at/A1?id=abcdefghijklmnopqrst')});assert.equal(r.status,502);assert.doesNotMatch(await r.text(),/<html>Login/);}finally{global.fetch=original;}
 });
 test('A1 formats Markdown as a readable document with headings, lists and tables',async()=>{
-  const original=global.fetch;const md='# A pretty page\n\nSome **bold** text.\n\n- First\n- Second\n\n| Name | Value |\n| --- | --- |\n| Test | 42 |';
+  const original=global.fetch;const md='# A pretty page\n\nSome **bold** text.\n\n- First\n- Second\n\n| Name | Value |\n| --- | --- |\n| Test | 42 |\n\n```html\n<h1>An HTML example</h1>\n```\n\nMarkdown continues.';
   global.fetch=async()=>new Response('"'+md+'"');
-  try{const r=await onRequestGet({request:new Request('https://sheets.built.at/a1?id=abcdefghijklmnopqrst')});const html=await r.text();assert.match(html,/<h1>A pretty page<\/h1>/);assert.match(html,/<strong>bold<\/strong>/);assert.match(html,/<li>First<\/li>/);assert.match(html,/<table>/);assert.match(html,/max-width: 720px/);}finally{global.fetch=original;}
+  try{const r=await onRequestGet({request:new Request('https://sheets.built.at/a1?id=abcdefghijklmnopqrst')});const html=await r.text();assert.match(html,/<h1>A pretty page<\/h1>/);assert.match(html,/<strong>bold<\/strong>/);assert.match(html,/<li>First<\/li>/);assert.match(html,/<table>/);assert.match(html,/max-width: 720px/);assert.match(html,/&lt;h1&gt;An HTML example&lt;\/h1&gt;/);assert.match(html,/<p>Markdown continues\.<\/p>/);}finally{global.fetch=original;}
 });
 test('cell route accepts lowercase and uppercase A1',async()=>{
   const original=global.fetch;global.fetch=async()=>new Response('# Hello');
