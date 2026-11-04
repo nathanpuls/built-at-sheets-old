@@ -40,7 +40,7 @@ export async function onRequestGet({request}){
     });
     const configured=['0','none'].includes(params.get('menu'))?[]:undefined;
     const items=utilityItems(params.get('pages')==='0'?[]:pageLinks,configured);
-    const html=injectUtilityMenu(getRenderableHtml(content),{source:content,items});
+    const html=injectUtilityMenu(getRenderableHtml(content),{source:content,items,scriptUrl:new URL('/utility-client.js',request.url).href});
     return new Response(html,{headers});
   }catch{return error('Google could not return A1. Refresh to try again.',502);}
 }

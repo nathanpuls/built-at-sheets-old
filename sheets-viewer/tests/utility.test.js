@@ -8,7 +8,7 @@ test('Copy is first, page navigation is optional, and empty configuration adds n
 });
 test('menu preserves exact source and safely embeds closing script tags',()=>{
  const source='  # Markdown\n\n<script>test</script>\n';const output=injectUtilityMenu('<html><body><h1>Rendered</h1></body></html>',{source,items:[{label:'Copy source',action:'copy'}]});
- assert.ok(output.includes('<h1>Rendered</h1>'));assert.ok(output.endsWith('</body></html>'));assert.ok(output.includes('"source":'+JSON.stringify(source).replace(/</g,'\\u003c').replace(/>/g,'\\u003e')));assert.equal((output.match(/<\/script>/g)||[]).length,1);
+ assert.ok(output.includes('<h1>Rendered</h1>'));assert.ok(output.endsWith('</body></html>'));assert.ok(output.includes('"source":'+JSON.stringify(source).replace(/</g,'\\u003c').replace(/>/g,'\\u003e')));assert.equal((output.match(/<\/script>/g)||[]).length,2);assert.ok(output.includes('src="/utility-client.js" defer'));
 });
 test('slug pages copy their own source and navigation keeps Sheet and worksheet IDs',async()=>{
  const old=global.fetch;global.fetch=async()=>new Response('"# Home",index\n"Plain source",about');
