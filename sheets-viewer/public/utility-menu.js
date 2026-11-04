@@ -18,9 +18,11 @@ function mountUtilityMenu(config){
   const tell=text=>{notice.textContent=text;notice.hidden=false;clearTimeout(timer);timer=setTimeout(()=>{notice.hidden=true;},1600);};
   async function copy(){
     // The synchronous fallback also works in the page's opaque-origin sandbox.
-    const area=document.createElement('textarea');area.value=config.source;area.setAttribute('aria-label','Page source');area.style.cssText='position:fixed;top:0;left:-9999px;opacity:0;font-size:16px;';
+    const area=document.createElement('textarea');area.value=config.source;area.readOnly=true;area.setAttribute('aria-label','Page source');area.style.cssText='position:fixed;top:0;left:-9999px;opacity:0;font-size:16px;';
     root.append(area);area.focus();area.select();area.setSelectionRange(0,area.value.length);
-    let copied=false;try{copied=document.execCommand('copy');}catch{}area.remove();
+    const onCopy=event=>{event.clipboardData?.setData('text/plain',config.source);event.preventDefault();};
+    document.addEventListener('copy',onCopy,true);
+    let copied=false;try{copied=document.execCommand('copy');}catch{}document.removeEventListener('copy',onCopy,true);area.remove();
     if(!copied){try{await navigator.clipboard.writeText(config.source);copied=true;}catch{}}
     tell(copied?'Copied':'Could not copy');toggle.focus();
   }
