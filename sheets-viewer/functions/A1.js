@@ -1,5 +1,7 @@
 import {parseCsv} from './api/sheet.js';
 import {getRenderableHtml} from '../public/render.js';
+import {pagesFromTable,getRedirectUrl,normalizeSlug} from '../public/model.js';
+import {injectUtilityMenu,utilityItems} from '../public/utility-menu.js';
 
 const headers={
   'content-type':'text/html; charset=utf-8',
@@ -19,14 +21,26 @@ export async function onRequestGet({request}){
   const gid=params.get('gid');
   if(gid!==null&&!/^\d+$/.test(gid))return error('The worksheet ID must be a number.',400);
   const url=new URL(`https://docs.google.com/spreadsheets/d/${id}/export`);
-  url.searchParams.set('format','csv');url.searchParams.set('range','A1');url.searchParams.set('_',crypto.randomUUID());
+  url.searchParams.set('format','csv');url.searchParams.set('range','A:B');url.searchParams.set('_',crypto.randomUUID());
   if(gid!==null)url.searchParams.set('gid',gid);
   try{
     const response=await fetch(url,{cache:'no-store',headers:{'cache-control':'no-cache'},signal:AbortSignal.timeout(20000)});
     if(!response.ok||/text\/html/i.test(response.headers.get('content-type')||''))return error('Could not read A1. Share the Google Sheet as “Anyone with the link can view,” then refresh.',502);
-    const content=parseCsv(await response.text())[0]?.[0]||'';
+    const rows=parseCsv(await response.text());
+    const slug=params.has('slug')?normalizeSlug(params.get('slug')):null;
+    let pages=new Map();try{pages=pagesFromTable({rows:rows.map(row=>({c:row.slice(0,2).map(v=>({v}))}))});}catch{if(slug!==null)return error('Page slugs must be valid and unique in column B.',400);}
+    if(slug!==null&&!pages.has(slug))return error('This page slug was not found in column B.',404);
+    const content=slug===null?(rows[0]?.[0]||''):pages.get(slug).content;
     if(!content.trim())return error('A1 is empty. Put HTML or Markdown in A1, then refresh this page.',404);
-    const html=getRenderableHtml(content);
+    const redirect=slug!==null&&getRedirectUrl(content);
+    if(redirect)return new Response(null,{status:302,headers:{...headers,location:redirect}});
+    const pageLinks=[...pages.values()].filter(page=>page.content.trim()).map(page=>{
+      const href=new URL('/a1',request.url);href.searchParams.set('id',id);href.searchParams.set('slug',page.slug);if(gid!==null)href.searchParams.set('gid',gid);
+      return {label:page.slug==='index'?'Home':page.slug.replace(/[-_]/g,' '),href:href.pathname+href.search,current:slug===page.slug||(slug===null&&page.content===content)};
+    });
+    const configured=['0','none'].includes(params.get('menu'))?[]:undefined;
+    const items=utilityItems(params.get('pages')==='0'?[]:pageLinks,configured);
+    const html=injectUtilityMenu(getRenderableHtml(content),{source:content,items});
     return new Response(html,{headers});
   }catch{return error('Google could not return A1. Refresh to try again.',502);}
 }
