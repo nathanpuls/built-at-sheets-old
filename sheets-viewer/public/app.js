@@ -5,7 +5,7 @@ const id=extractSheetId(query.get('id')),slug=normalizeSlug(query.get('slug')||q
 let requestNumber=0;
 $('open').addEventListener('submit',e=>{e.preventDefault();const value=$('sheet').value;const sheetId=extractSheetId(value);if(!sheetId){$('form-error').textContent='Paste a valid Google Sheet link or ID.';return;}const worksheet=value.match(/[#?&]gid=(\d+)/)?.[1]||'';location.assign(pageUrl(sheetId,'index',worksheet));});
 function status(title,message){$('status').innerHTML=`<h1>${escapeHtml(title)}</h1><p>${escapeHtml(message)}</p>`;$('status').hidden=false;}
-async function loadGviz(){const params=new URLSearchParams({id,_:String(Date.now())});if(gid)params.set('gid',gid);const res=await fetch('/api/sheet?'+params,{cache:'no-store'});const data=await res.json();if(!res.ok)throw new Error(data.error||'Could not load this Sheet.');return data;}
+async function loadSheet(){const params=new URLSearchParams({id,_:String(Date.now())});if(gid)params.set('gid',gid);const res=await fetch('/api/sheet?'+params,{cache:'no-store'});const data=await res.json();if(!res.ok)throw new Error(data.error||'Could not load this Sheet.');return data;}
 function prepareDocument(content,pages){
  const doc=new DOMParser().parseFromString(getRenderableHtml(content),'text/html');
  // Relative page links navigate the viewer, preserving the Sheet ID.
@@ -16,8 +16,8 @@ function prepareDocument(content,pages){
  return '<!doctype html>\n'+doc.documentElement.outerHTML;
 }
 async function renderUserPage(){
- const current=++requestNumber;$('refresh').disabled=true;$('preview').hidden=true;status('Loading Sheet…','Fetching the current contents from Google.');
- try{const data=await loadGviz();if(current!==requestNumber)return;const pages=pagesFromTable(data.table);
+ const current=++requestNumber;$('refresh').disabled=true;$('status').hidden=true;
+ try{const data=await loadSheet();if(current!==requestNumber)return;const pages=pagesFromTable(data.table);
    $('pages').replaceChildren();for(const page of pages.values()){const a=document.createElement('a');a.textContent=page.slug==='index'?'Home':page.slug.replace(/[-_]/g,' ');a.href=pageUrl(id,page.slug,gid);if(page.slug===slug)a.setAttribute('aria-current','page');$('pages').append(a);}
    const page=pages.get(slug);if(!page)throw new Error(slug==='index'?'Add a row with “index” in column B to create your homepage.':`There is no page with slug “${slug}” in column B.`);
    if(!page.content.trim())throw new Error(`The “${slug}” page has no content in column A.`);
