@@ -36,8 +36,7 @@ function mountUtilityMenu(config){
   host.addEventListener('pointerleave',event=>{if(hoverCapable.matches&&event.pointerType==='mouse'&&!panel.contains(root.activeElement))deferClose();});
   toggle.addEventListener('pointerenter',event=>{if(hoverCapable.matches&&event.pointerType==='mouse')open();});
   panel.addEventListener('pointerenter',event=>{if(hoverCapable.matches&&event.pointerType==='mouse')clearTimeout(closeTimer);});
-  toggle.addEventListener('click',event=>{
-    if(hoverCapable.matches&&event.detail>0){open();return;}
+  toggle.addEventListener('click',()=>{
     if(!panel.hidden){close();return;}
     open();
   });
