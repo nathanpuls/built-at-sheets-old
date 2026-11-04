@@ -7,7 +7,9 @@ function mountUtilityMenu(config){
     :host{color-scheme:light}*{box-sizing:border-box}button,a{font:13px/1.4 system-ui,sans-serif;color:#333;letter-spacing:normal;text-transform:none}button{cursor:pointer}#toggle{display:block;margin-left:auto;width:36px;height:36px;padding:0;border:0;border-radius:5px;background:transparent;color:#777;font-size:25px;line-height:1}#toggle:hover,#toggle:focus-visible{color:#111;background:rgba(127,127,127,.08)}#panel{position:absolute;right:0;top:40px;min-width:172px;max-width:min(280px,calc(100vw - 24px));max-height:calc(100dvh - 64px);overflow:auto;padding:5px;background:#fff;border-radius:7px;box-shadow:0 3px 20px #00000018}#panel button,#panel a{display:block;width:100%;margin:0;padding:10px 12px;border:0;border-radius:4px;text-align:left;text-decoration:none;background:none;overflow-wrap:anywhere}#panel button:hover,#panel a:hover,#panel button:focus-visible,#panel a:focus-visible{background:#f3f3f3;color:#111}#panel a[aria-current]{font-weight:650}#notice{position:fixed;left:50%;top:14px;transform:translateX(-50%);white-space:nowrap;max-width:calc(100vw - 80px);font:500 13px/1.4 system-ui,sans-serif;color:#fff;background:#252525;padding:9px 16px;border-radius:999px;box-shadow:0 3px 14px #00000018;pointer-events:none}[hidden]{display:none!important}@media(max-width:600px){#toggle{width:44px;height:44px}#panel{top:48px}#panel button,#panel a{min-height:44px;padding:12px}}
   </style><span id="notice" role="status" aria-live="polite" hidden></span><button id="toggle" type="button" aria-label="Page utilities" aria-haspopup="menu" aria-expanded="false" aria-controls="panel">⋯</button><div id="panel" role="menu" aria-label="Page utilities" hidden></div>`;
   const toggle=root.getElementById('toggle'),panel=root.getElementById('panel'),notice=root.getElementById('notice');let timer;
+  const hoverCapable=matchMedia('(hover: hover) and (pointer: fine)');
   const close=()=>{panel.hidden=true;toggle.setAttribute('aria-expanded','false');};
+  const open=()=>{show(config.items);panel.hidden=false;toggle.setAttribute('aria-expanded','true');};
   const tell=text=>{notice.textContent=text;notice.hidden=false;clearTimeout(timer);timer=setTimeout(()=>{notice.hidden=true;},1600);};
   async function copy(){
     // The synchronous fallback also works in the page's opaque-origin sandbox.
@@ -29,12 +31,18 @@ function mountUtilityMenu(config){
       panel.append(entry);
     }
   }
-  toggle.addEventListener('click',()=>{if(!panel.hidden){close();return;}show(config.items);panel.hidden=false;toggle.setAttribute('aria-expanded','true');});
+  host.addEventListener('pointerenter',event=>{if(hoverCapable.matches&&event.pointerType==='mouse')open();});
+  host.addEventListener('pointerleave',event=>{if(hoverCapable.matches&&event.pointerType==='mouse'&&!panel.contains(root.activeElement))close();});
+  toggle.addEventListener('click',event=>{
+    if(hoverCapable.matches&&event.detail>0){open();return;}
+    if(!panel.hidden){close();return;}
+    open();
+  });
   document.addEventListener('pointerdown',e=>{if(!e.composedPath().includes(host))close();});
   document.addEventListener('focusin',e=>{if(!e.composedPath().includes(host))close();});
   root.addEventListener('keydown',e=>{
     if(e.key==='Escape'){close();toggle.focus();e.preventDefault();}
-    if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();if(panel.hidden){show(config.items);panel.hidden=false;toggle.setAttribute('aria-expanded','true');}const entries=[...panel.querySelectorAll('button,a')];const index=entries.indexOf(root.activeElement);entries[(index+(e.key==='ArrowDown'?1:-1)+entries.length)%entries.length]?.focus();}
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();if(panel.hidden)open();const entries=[...panel.querySelectorAll('button,a')];const index=entries.indexOf(root.activeElement);entries[(index+(e.key==='ArrowDown'?1:-1)+entries.length)%entries.length]?.focus();}
   });
   document.body.append(host);
 }
