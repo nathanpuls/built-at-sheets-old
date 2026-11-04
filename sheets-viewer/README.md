@@ -1,5 +1,7 @@
 # Built.at Sheets viewer
 
+Minimal HTML preview: `https://sheets.built.at/A1?id=SHEET_ID` (uppercase `ID` also works). Each request fetches A1 directly from Google's CSV export and returns its HTML as the entire page. No header, sidebar, iframe, menu, loading screen, storage, or viewer cache. Optional `gid` selects a worksheet. Refresh after editing A1; no deployment is required for content changes. Google response and save propagation time still apply. HTML runs under an opaque-origin CSP sandbox with scripts enabled.
+
 Cloudflare Pages viewer adapted from the original prototype. No signup, registry, D1, Apps Script, scheduled work, or application caching.
 
 URLs: `https://sheets.built.at/?id=SHEET_ID` and `?id=SHEET_ID&slug=about`. Optional `gid=123` selects a worksheet; otherwise Google selects the first worksheet.
