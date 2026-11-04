@@ -1,4 +1,5 @@
 import {parseCsv} from './api/sheet.js';
+import {getRenderableHtml} from '../public/render.js';
 
 const headers={
   'content-type':'text/html; charset=utf-8',
@@ -14,7 +15,7 @@ function error(message,status){return new Response(`<!doctype html><html><head><
 export async function onRequestGet({request}){
   const params=new URL(request.url).searchParams;
   const id=params.get('id')||params.get('ID')||'';
-  if(!/^[a-zA-Z0-9_-]{20,}$/.test(id))return error('Use /A1?id=YOUR_SHEET_ID to preview the HTML in cell A1.',400);
+  if(!/^[a-zA-Z0-9_-]{20,}$/.test(id))return error('Use /a1?id=YOUR_SHEET_ID to preview the HTML or Markdown in cell A1.',400);
   const gid=params.get('gid');
   if(gid!==null&&!/^\d+$/.test(gid))return error('The worksheet ID must be a number.',400);
   const url=new URL(`https://docs.google.com/spreadsheets/d/${id}/export`);
@@ -24,8 +25,8 @@ export async function onRequestGet({request}){
     const response=await fetch(url,{cache:'no-store',headers:{'cache-control':'no-cache'},signal:AbortSignal.timeout(20000)});
     if(!response.ok||/text\/html/i.test(response.headers.get('content-type')||''))return error('Could not read A1. Share the Google Sheet as “Anyone with the link can view,” then refresh.',502);
     const content=parseCsv(await response.text())[0]?.[0]||'';
-    if(!content.trim())return error('A1 is empty. Put HTML in A1, then refresh this page.',404);
-    const html=/<!doctype\s+html|<html[\s>]/i.test(content)?content:`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sheet preview</title></head><body>${content}</body></html>`;
+    if(!content.trim())return error('A1 is empty. Put HTML or Markdown in A1, then refresh this page.',404);
+    const html=getRenderableHtml(content);
     return new Response(html,{headers});
   }catch{return error('Google could not return A1. Refresh to try again.',502);}
 }
