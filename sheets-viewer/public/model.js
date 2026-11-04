@@ -10,5 +10,14 @@ export function pagesFromTable(table){
     pages.set(slug,{slug,content});
   }return pages;
 }
-export function getRedirectUrl(content){const text=String(content).trim();if(!/^https?:\/\/[^\s<>]+$/i.test(text))return '';try{const url=new URL(text);return url.username||url.password?'':url.href;}catch{return '';}}
-export function pageUrl(id,slug='index',gid=''){const p=new URLSearchParams({id});if(slug!=='index')p.set('slug',slug);if(gid)p.set('gid',gid);return '/?'+p;}
+export function getRedirectUrl(content){
+ const text=String(content).trim();if(!text||/[\s<>"'`\\]/.test(text))return '';
+ let target=text;
+ if(text.startsWith('//'))target='https:'+text;
+ else if(!/^https?:\/\//i.test(text)){
+   if(!/^(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}|localhost)(?::\d{1,5})?(?:[/?#].*)?$/i.test(text))return '';
+   target='https://'+text;
+ }
+ try{const url=new URL(target);return !['http:','https:'].includes(url.protocol)||url.username||url.password?'':url.href;}catch{return '';}
+}
+export function pageUrl(id,slug='home',gid=''){const p=new URLSearchParams({id});if(slug!=='home')p.set('slug',slug);if(gid)p.set('gid',gid);return '/?'+p;}

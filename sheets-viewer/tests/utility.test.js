@@ -18,3 +18,11 @@ test('legacy page URLs use the same minimal viewer and preserve the selected slu
  const old=global.fetch;global.fetch=async()=>new Response('Home,index\nOther,about');
  try{const response=await onRequest({request:new Request('https://sheets.built.at/?id=abcdefghijklmnopqrst&slug=about'),next:()=>{throw Error('Should render page');}});assert.ok((await response.text()).includes('"source":"Other"'));}finally{global.fetch=old;}
 });
+test('the home slug supplies the homepage regardless of row position',async()=>{
+ const old=global.fetch;global.fetch=async()=>new Response('About,about\nHomepage,home');
+ try{const response=await onRequest({request:new Request('https://sheets.built.at/?id=abcdefghijklmnopqrst'),next:()=>{throw Error('Should render home');}});const html=await response.text();assert.ok(html.includes('"source":"Homepage"'));assert.ok(html.includes('"label":"Home"'));assert.ok(html.includes('slug=home'));}finally{global.fetch=old;}
+});
+test('bare-domain redirects work from A1 and from a selected page',async()=>{
+ const old=global.fetch;global.fetch=async()=>new Response('example.com/destination,go');
+ try{for(const suffix of ['', '&slug=go']){const response=await onRequestGet({request:new Request('https://sheets.built.at/a1?id=abcdefghijklmnopqrst'+suffix)});assert.equal(response.status,302);assert.equal(response.headers.get('location'),'https://example.com/destination');}}finally{global.fetch=old;}
+});

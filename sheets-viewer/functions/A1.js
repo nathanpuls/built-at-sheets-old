@@ -32,11 +32,11 @@ export async function onRequestGet({request}){
     if(slug!==null&&!pages.has(slug))return error('This page slug was not found in column B.',404);
     const content=slug===null?(rows[0]?.[0]||''):pages.get(slug).content;
     if(!content.trim())return error('A1 is empty. Put HTML or Markdown in A1, then refresh this page.',404);
-    const redirect=slug!==null&&getRedirectUrl(content);
+    const redirect=getRedirectUrl(content);
     if(redirect)return new Response(null,{status:302,headers:{...headers,location:redirect}});
     const pageLinks=[...pages.values()].filter(page=>page.content.trim()).map(page=>{
       const href=new URL('/a1',request.url);href.searchParams.set('id',id);href.searchParams.set('slug',page.slug);if(gid!==null)href.searchParams.set('gid',gid);
-      return {label:page.slug==='index'?'Home':page.slug.replace(/[-_]/g,' '),href:href.pathname+href.search,current:slug===page.slug||(slug===null&&page.content===content)};
+      return {label:page.slug==='home'?'Home':page.slug.replace(/[-_]/g,' '),href:href.pathname+href.search,current:slug===page.slug||(slug===null&&page.content===content)};
     });
     const configured=['0','none'].includes(params.get('menu'))?[]:undefined;
     const items=utilityItems(params.get('pages')==='0'?[]:pageLinks,configured);

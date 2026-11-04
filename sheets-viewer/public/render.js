@@ -285,9 +285,9 @@ function escapeHtml(value){return String(value).replace(/[&<>"']/g,c=>({'&':'&am
     }
 
     .preview-content a {
-      color: var(--link-color);
+      color: #000;
       text-decoration: underline;
-      text-decoration-color: var(--accent);
+      text-decoration-color: #000;
       text-decoration-thickness: 1px;
       text-underline-offset: 0.25em;
     }

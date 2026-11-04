@@ -10,6 +10,11 @@ test('optional headers, blank slugs, and homepage in any row including A1',()=>{
 });
 test('duplicate and invalid slugs are explicit errors',()=>{assert.throws(()=>pagesFromTable(table([['one','About'],['two','/about/']])),/Duplicate/);assert.throws(()=>pagesFromTable(table([['x','../about']])),/Invalid/);});
 test('redirects require an entire HTTP(S) URL',()=>{assert.equal(getRedirectUrl('https://example.com'),'https://example.com/');for(const v of ['javascript:alert(1)','<a href="https://example.com">Link</a>','Read https://example.com','https://user:pass@example.com'])assert.equal(getRedirectUrl(v),'');});
+test('bare domains redirect with HTTPS while ordinary text stays text',()=>{
+ for(const [value,expected] of [['example.com','https://example.com/'],['www.example.com/path?q=yes','https://www.example.com/path?q=yes'],['//example.com/next','https://example.com/next'],['http://example.com','http://example.com/']])assert.equal(getRedirectUrl(value),expected);
+ for(const value of ['Just a sentence','home','person@example.com','javascript:alert(1)','example.com<script>'])assert.equal(getRedirectUrl(value),'');
+ assert.equal(pageUrl('sheet-id'),'/?id=sheet-id');assert.equal(pageUrl('sheet-id','home'),'/?id=sheet-id');
+});
 test('URL and Sheet extraction preserve routing',()=>{assert.equal(pageUrl('test','about','123'),'/?id=test&slug=about&gid=123');assert.equal(extractSheetId('https://docs.google.com/spreadsheets/d/abcdefghijklmnopqrst/edit'),'abcdefghijklmnopqrst');});
 test('original Markdown and HTML rendering remain usable',()=>{assert.match(getRenderableHtml('# Hello\n\nSome **bold** text.'),/<h1>Hello<\/h1>/);assert.match(getRenderableHtml('<main>HTML</main>'),/<main>HTML<\/main>/);});
 test('Sheet retrieval is fresh and uses both columns with no implicit headers',async()=>{
