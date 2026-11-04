@@ -16,7 +16,7 @@ function prepareDocument(content,pages){
  return '<!doctype html>\n'+doc.documentElement.outerHTML;
 }
 async function renderUserPage(){
- const current=++requestNumber;$('refresh').disabled=true;status('Loading Sheet…','Fetching the current contents from Google.');
+ const current=++requestNumber;$('refresh').disabled=true;$('preview').hidden=true;status('Loading Sheet…','Fetching the current contents from Google.');
  try{const data=await loadGviz();if(current!==requestNumber)return;const pages=pagesFromTable(data.table);
    $('pages').replaceChildren();for(const page of pages.values()){const a=document.createElement('a');a.textContent=page.slug==='index'?'Home':page.slug.replace(/[-_]/g,' ');a.href=pageUrl(id,page.slug,gid);if(page.slug===slug)a.setAttribute('aria-current','page');$('pages').append(a);}
    const page=pages.get(slug);if(!page)throw new Error(slug==='index'?'Add a row with “index” in column B to create your homepage.':`There is no page with slug “${slug}” in column B.`);
