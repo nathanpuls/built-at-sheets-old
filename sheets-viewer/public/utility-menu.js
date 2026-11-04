@@ -1,8 +1,8 @@
 // Add links or supported actions here. An empty array hides the menu.
-export const DEFAULT_UTILITY_ITEMS = [{label:'Copy source',action:'copy'},{label:'Pages',action:'pages'}];
+export const DEFAULT_UTILITY_ITEMS = [{label:'Copy source',action:'copy'},{action:'pages'}];
 
 export function utilityItems(pages,configured=DEFAULT_UTILITY_ITEMS){
-  return configured.map(item=>item.action==='pages'?{...item,items:pages}:item).filter(item=>item.action!=='pages'||item.items.length>0);
+  return configured.flatMap(item=>item.action==='pages'?pages:item);
 }
 
 

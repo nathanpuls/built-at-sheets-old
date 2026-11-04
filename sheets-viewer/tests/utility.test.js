@@ -4,7 +4,7 @@ import {injectUtilityMenu,utilityItems} from '../public/utility-menu.js';
 import {onRequestGet} from '../functions/A1.js';
 import {onRequest} from '../functions/index.js';
 test('Copy is first, page navigation is optional, and empty configuration adds nothing',()=>{
- assert.deepEqual(utilityItems([]).map(x=>x.action),['copy']);assert.deepEqual(utilityItems([{label:'Home',href:'/'}]).map(x=>x.action),['copy','pages']);assert.equal(injectUtilityMenu('<p>Unchanged</p>',{source:'raw',items:[]}),'<p>Unchanged</p>');
+ assert.deepEqual(utilityItems([]).map(x=>x.action),['copy']);assert.deepEqual(utilityItems([{label:'Home',href:'/'}]),[{label:'Copy source',action:'copy'},{label:'Home',href:'/'}]);assert.equal(injectUtilityMenu('<p>Unchanged</p>',{source:'raw',items:[]}),'<p>Unchanged</p>');
 });
 test('menu preserves exact source and safely embeds closing script tags',()=>{
  const source='  # Markdown\n\n<script>test</script>\n';const output=injectUtilityMenu('<html><body><h1>Rendered</h1></body></html>',{source,items:[{label:'Copy source',action:'copy'}]});

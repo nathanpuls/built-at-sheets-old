@@ -19,14 +19,13 @@ function mountUtilityMenu(config){
     if(!copied){try{await navigator.clipboard.writeText(config.source);copied=true;}catch{}}
     tell(copied?'Copied':'Could not copy');toggle.focus();
   }
-  const actions={copy,pages:item=>show(item.items,true)};
-  function show(items,back=false){
+  const actions={copy};
+  function show(items){
     panel.replaceChildren();
-    if(back){const button=document.createElement('button');button.type='button';button.textContent='Back';button.setAttribute('role','menuitem');button.addEventListener('click',()=>{show(config.items);panel.querySelector('button,a')?.focus();});panel.append(button);}
     for(const item of items){
       const entry=document.createElement(item.href?'a':'button');entry.textContent=item.label;entry.setAttribute('role','menuitem');
       if(item.href){entry.href=item.href;if(item.current)entry.setAttribute('aria-current','page');entry.addEventListener('click',close);}
-      else{entry.type='button';if(item.action==='pages')entry.setAttribute('aria-haspopup','menu');entry.addEventListener('click',()=>{if(item.action==='pages'){actions.pages(item);panel.querySelector('button,a')?.focus();}else{close();actions[item.action]?.(item);}});}
+      else{entry.type='button';entry.addEventListener('click',()=>{close();actions[item.action]?.(item);});}
       panel.append(entry);
     }
   }
