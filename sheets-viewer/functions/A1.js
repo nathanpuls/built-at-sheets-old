@@ -18,7 +18,7 @@ async function firstSheetGid(id){
     if(!response.ok)return '';
     const html=await response.text();
     const literal='"(?:\\\\.|[^"\\\\])*"';
-    const pattern=new RegExp('items\\\\.push\\\\(\\\\{name:\\\\s*'+literal+',\\\\s*pageUrl:\\\\s*'+literal+',\\\\s*gid:\\\\s*"(\\\\d+)"');
+    const pattern=new RegExp('items\\.push\\(\\{name:\\s*'+literal+',\\s*pageUrl:\\s*'+literal+',\\s*gid:\\s*"(\\d+)"');
     return html.match(pattern)?.[1]||'';
   }catch{return '';}
 }
