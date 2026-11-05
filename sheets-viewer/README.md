@@ -19,3 +19,10 @@ Utility menu configuration: edit DEFAULT_UTILITY_ITEMS in public/utility-menu.js
 Visible pages check a small revision endpoint about once a second with at most one request in flight. The endpoint fetches current public sheet values directly from Google. When the revision changes, the page reloads so HTML, CSS, scripts and menu links all update together. Hidden tabs pause checking and check immediately when visible again. Failed requests back off. Google save and export propagation can add delay. Add `live=0` to disable automatic updates.
 
 A Google Drive push implementation was evaluated but notifications did not arrive within 45 seconds in the end-to-end check. The final implementation uses short active-page checks instead, requires no Google credential, and has no separate Worker or Durable Object.
+
+## Workbook theme and menu
+
+- **Theme → A1** accepts plain CSS and applies it to all HTML and Markdown pages from the workbook. For example, `body { background: pink; }`. Leave A1 blank for the page's own styles.
+- **Settings → A1:B1** accepts `Show default menu` in A1 and `FALSE` in B1 to hide the top-right ellipsis. A Google Sheets checkbox in B1 works too. Use `TRUE` or clear B1 to show the menu again.
+
+Both tabs are optional. Changes to these cells participate in the same live updates as page edits.
