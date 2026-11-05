@@ -3,7 +3,6 @@ import {getRenderableHtml} from '../public/render.js';
 import {pagesFromTable,getRedirectUrl,normalizeSlug} from '../public/model.js';
 import {injectUtilityMenu,utilityItems} from '../public/utility-menu.js';
 
-const liveSheets=new Set(['1vCEUkyx5zc4-GGWd_DyCFfpEPD8Lt3JvazGc-EG1qyE','1e5WRt0mWLfVkY2KzTb3gyNoiuKV1yHXy2eFdLmiF-R8']);
 const headers={
   'content-type':'text/html; charset=utf-8',
   'cache-control':'no-store, max-age=0',
@@ -64,13 +63,12 @@ export async function onRequestGet({request}){
     }
     const utilityScriptUrl=new URL('/utility-client.js',request.url);utilityScriptUrl.searchParams.set('v','20261105-1000ms');
     let html=injectUtilityMenu(getRenderableHtml(content),{source:content,items,scriptUrl:utilityScriptUrl.href});
-    if(liveSheets.has(id)&&params.get('live')!=='0'){
+    if(params.get('live')!=='0'){
       const checkUrl=new URL(request.url);checkUrl.searchParams.set('live','check');
-      const socketUrl=new URL('wss://built-at-sheets-live.natepuls.workers.dev/live');socketUrl.searchParams.set('id',id);
-      const config=JSON.stringify({revision,checkUrl:checkUrl.href,socketUrl:socketUrl.href}).replace(/</g,'\\u003c');
-      const client=new URL('/live-client.js?v=20261105-1',request.url).href;
+      const config=JSON.stringify({revision,checkUrl:checkUrl.href}).replace(/</g,'\\u003c');
+      const client=new URL('/live-client.js?v=20261105-fast',request.url).href;
       const script=`<script type="application/json" data-built-at-live-config>${config}</script><script src="${client}" defer></script>`;
-      const closing=[...html.matchAll(/<\\/body\\s*>/gi)].at(-1);
+      const closing=[...html.matchAll(/<\/body\s*>/gi)].at(-1);
       html=closing?html.slice(0,closing.index)+script+html.slice(closing.index):html+script;
     }
     return new Response(html,{headers});
