@@ -43,7 +43,7 @@ export async function onRequestGet({request}){
     if(items.length){
       const editUrl=new URL(`https://docs.google.com/spreadsheets/d/${encodeURIComponent(id)}/edit`);
       const editRow=slug===null?1:rows.findIndex(row=>normalizeSlug(row[1])===slug)+1;
-      const editHash=new URLSearchParams();if(gid!==null)editHash.set('gid',gid);editHash.set('range',`A${editRow}`);editUrl.hash=editHash.toString();
+      const editHash=new URLSearchParams();if(gid!==null){editUrl.searchParams.set('gid',gid);editHash.set('gid',gid);}editHash.set('range',`A${editRow}`);editUrl.hash=editHash.toString();
       const copyIndex=items.findIndex(item=>item.action==='copy');
       items.splice(copyIndex<0?0:copyIndex+1,0,{label:'Edit Sheet',href:editUrl.href});
     }
