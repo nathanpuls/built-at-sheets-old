@@ -1,0 +1,16 @@
+name = "built-at-sheets-live"
+main = "worker.js"
+compatibility_date = "2026-11-04"
+account_id = "ed3b0af15e1c2b8a6a351cc929b0a312"
+workers_dev = true
+
+[vars]
+SHEET_IDS = "1vCEUkyx5zc4-GGWd_DyCFfpEPD8Lt3JvazGc-EG1qyE,1e5WRt0mWLfVkY2KzTb3gyNoiuKV1yHXy2eFdLmiF-R8"
+
+[[durable_objects.bindings]]
+name = "SHEET_LIVE"
+class_name = "SheetLive"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SheetLive"]
