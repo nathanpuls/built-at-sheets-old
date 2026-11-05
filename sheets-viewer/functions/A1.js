@@ -47,7 +47,8 @@ export async function onRequestGet({request}){
       const copyIndex=items.findIndex(item=>item.action==='copy');
       items.splice(copyIndex<0?0:copyIndex+1,0,{label:'Edit Sheet',href:editUrl.href});
     }
-    const html=injectUtilityMenu(getRenderableHtml(content),{source:content,items,scriptUrl:new URL('/utility-client.js',request.url).href});
+    const utilityScriptUrl=new URL('/utility-client.js',request.url);utilityScriptUrl.searchParams.set('v','20261105-1000ms');
+    const html=injectUtilityMenu(getRenderableHtml(content),{source:content,items,scriptUrl:utilityScriptUrl.href});
     return new Response(html,{headers});
   }catch{return error('Google could not return A1. Refresh to try again.',502);}
 }
