@@ -12,6 +12,16 @@ const headers={
   'x-content-type-options':'nosniff',
   'content-security-policy':'sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation'
 };
+async function firstSheetGid(id){
+  try{
+    const response=await fetch(`https://docs.google.com/spreadsheets/d/${encodeURIComponent(id)}/htmlview`,{cache:'no-store',headers:{'cache-control':'no-cache'},signal:AbortSignal.timeout(20000)});
+    if(!response.ok)return '';
+    const html=await response.text();
+    const literal='"(?:\\\\.|[^"\\\\])*"';
+    const pattern=new RegExp('items\\\\.push\\\\(\\\\{name:\\\\s*'+literal+',\\\\s*pageUrl:\\\\s*'+literal+',\\\\s*gid:\\\\s*"(\\\\d+)"');
+    return html.match(pattern)?.[1]||'';
+  }catch{return '';}
+}
 function error(message,status){return new Response(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sheet preview</title></head><body style="font:16px/1.6 system-ui;padding:24px;max-width:650px;margin:auto"><p>${message}</p></body></html>`,{status,headers});}
 
 export async function onRequestGet({request}){
@@ -43,7 +53,8 @@ export async function onRequestGet({request}){
     if(items.length){
       const editUrl=new URL(`https://docs.google.com/spreadsheets/d/${encodeURIComponent(id)}/edit`);
       const editRow=slug===null?1:rows.findIndex(row=>normalizeSlug(row[1])===slug)+1;
-      const editHash=new URLSearchParams();if(gid!==null){editUrl.searchParams.set('gid',gid);editHash.set('gid',gid);}editHash.set('range',`A${editRow}`);editUrl.hash=editHash.toString();
+      const editGid=gid??await firstSheetGid(id);
+      const editHash=new URLSearchParams();if(editGid){editUrl.searchParams.set('gid',editGid);editHash.set('gid',editGid);}editHash.set('range',`A${editRow}`);editUrl.hash=editHash.toString();
       const copyIndex=items.findIndex(item=>item.action==='copy');
       items.splice(copyIndex<0?0:copyIndex+1,0,{label:'Edit Sheet',href:editUrl.href});
     }
