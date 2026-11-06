@@ -146,10 +146,9 @@ export async function onRequestGet({request}){
       const settings = siteSettings(await sheetRows(id, endsSettingsGid, 'A:D'));
       return await previewLogo(settings.logo, request.method);
     }
-    const [rows, tabs] = await Promise.all([
-      sheetRows(id, gid, 'A:B').catch(() => null),
-      sheetTabs(id)
-    ]);
+    const tabs = await sheetTabs(id);
+    const sourceGid = gid ?? (dedicated ? tabs.find(tab => tab.name === 'Pages')?.gid : tabs[0]?.gid);
+    const rows = await sheetRows(id, sourceGid ?? null, 'A:B').catch(() => null);
     if (!rows) return error('Could not read A1. Share the Google Sheet as “Anyone with the link can view,” then refresh.',502);
     const [themeRows, settingsRows, sharedRows] = await Promise.all([
       optionalTabRows(id, tabs, 'theme', 'A1'),
@@ -172,9 +171,10 @@ export async function onRequestGet({request}){
     let pages=new Map();try{pages=pagesFromTable({rows:rows.map(row=>({c:row.slice(0,2).map(v=>({v}))}))});}catch{if(!dedicated&&slug!==null)return error('Page slugs must be valid and unique in column B.',400);}
     if(!dedicated&&slug!==null&&!pages.has(slug))return error('This page slug was not found in column B.',404);
     const pathSlug = params.get('slug');
-    const content = dedicated
-      ? rows.find(([, name = '']) => name.trim().replace(/^\/+|\/+$/g, '') === pathSlug || (pathSlug === 'home' && /^\/+$/g.test(name.trim())))?.[0] ?? ''
-      : slug===null?(rows[0]?.[0]||''):pages.get(slug).content;
+    const sourceIndex = dedicated
+      ? rows.findIndex(([, name = '']) => name.trim().replace(/^\/+|\/+$/g, '') === pathSlug || (pathSlug === 'home' && /^\/+$/g.test(name.trim())))
+      : slug === null ? 0 : rows.findIndex(row => normalizeSlug(row[1]) === slug);
+    const content = dedicated ? rows[sourceIndex]?.[0] ?? '' : slug === null ? rows[0]?.[0] || '' : pages.get(slug).content;
     if(!content.trim())return error('A1 is empty. Put HTML or Markdown in A1, then refresh this page.',404);
     const redirect=getRedirectUrl(content);
     if(redirect)return new Response(null,{status:302,headers:{...headers,location:redirect}});
@@ -184,24 +184,29 @@ export async function onRequestGet({request}){
     });
     const configured=hideMenu||['0','none'].includes(params.get('menu'))?[]:undefined;
     const items=utilityItems(params.get('pages')==='0'?[]:pageLinks,configured);
-    if(items.length){
-      const editUrl=new URL(`https://docs.google.com/spreadsheets/d/${encodeURIComponent(id)}/edit`);
-      const editRow=slug===null?1:rows.findIndex(row=>normalizeSlug(row[1])===slug)+1;
-      const editGid=gid??tabs[0]?.gid;
-      const editHash=new URLSearchParams();if(editGid){editUrl.searchParams.set('gid',editGid);editHash.set('gid',editGid);}editHash.set('range',`A${editRow}`);editUrl.hash=editHash.toString();
+    let editUrl;
+    if (sourceGid != null && sourceIndex >= 0) {
+      const url=new URL(`https://docs.google.com/spreadsheets/d/${encodeURIComponent(id)}/edit`);
+      url.searchParams.set('gid', sourceGid);
+      url.hash = new URLSearchParams({gid:sourceGid, range:`A${sourceIndex + 1}`}).toString();
+      editUrl = url.href;
+    }
+    if (items.length && editUrl) {
       const copyIndex=items.findIndex(item=>item.action==='copy');
-      items.splice(copyIndex<0?0:copyIndex+1,0,{label:'Edit Sheet',href:editUrl.href});
+      items.splice(copyIndex<0?0:copyIndex+1,0,{label:'Edit Sheet',href:editUrl});
     }
     const utilityScriptUrl=new URL('/utility-client.js',request.url);utilityScriptUrl.searchParams.set('v','20261105-1000ms');
     let html=addSharedComponents(addTheme(getRenderableHtml(content),css),components);
     if (dedicated) {
       html = addSiteSettings(html, settings, revision);
+    }
+    if (dedicated || components.some(component => component.includes('ends-nav-data'))) {
       const entries = rows.flatMap(([code = '', name = '']) => {
         const slug = name.trim().replace(/^\/+|\/+$/g, '');
         if (!code.trim() || !name.trim() || (code.trim().toLowerCase() === 'content' && slug.toLowerCase() === 'slug')) return [];
         return [{label: !slug || slug === 'home' ? 'Home' : slug.replace(/[-_]/g, ' '), href: !slug || slug === 'home' ? '/' : '/' + slug}];
       });
-      const data = JSON.stringify({pages: entries, source: content}).replace(/</g, '\\u003c');
+      const data = JSON.stringify({pages: entries, source: content, editUrl}).replace(/</g, '\\u003c');
       html = addSharedComponents(html, [`<script type="application/json" id="ends-nav-data">${data}</script>`]);
     }
     if (!dedicated) html=injectUtilityMenu(html,{source:content,items,scriptUrl:utilityScriptUrl.href});
