@@ -94,7 +94,7 @@ test('ends.at collections create stable post routes, optional templates and hidd
         ['Visibility', 'Name', 'Content'],
         ['Show', 'post1', 'This is a post'],
         ['Show', 'another post', secondPost],
-        ['Hide', 'secret-post', 'Hidden post'],
+        [false, 'secret-post', 'Hidden post'],
         ['', 'a third post', '<article><h2>A Third Post</h2></article>']
       ]));
       case '990299918': return new Response(csv([
@@ -103,7 +103,7 @@ test('ends.at collections create stable post routes, optional templates and hidd
       ]));
       case '300': return new Response(csv([
         ['Name', 'Visibility', 'Content'],
-        ['css', 'Hide', 'body { color: red }'],
+        ['css', 'FALSE', 'body { color: red }'],
         ['visible', 'Show', '<footer>Visible component</footer>'],
         ['hidden', 'Hide', '<footer>Hidden component</footer>']
       ]));
