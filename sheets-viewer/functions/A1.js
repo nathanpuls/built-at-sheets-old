@@ -228,7 +228,7 @@ export async function onRequestGet({request}){
     const pathSlug = normalizeSlug(params.get('slug'));
     const hasPageHeader = dedicated && /^page$/i.test(rows[0]?.[1]?.trim() ?? '');
     const pageRows = hasPageHeader ? rows.slice(1) : rows;
-    const pageSlug = name => name.trim().replace(/^\/+|\/+$/g, '');
+    const pageSlug = name => String(name).trim().replace(/^\/+|\/+$/g, '').split('/').filter(Boolean).map(collectionSlug).join('/');
     const selectedHome = dedicated ? pageSlug(settings.homepage) : '';
     if (dedicated && requestUrl.pathname === '/' && !selectedHome) return error('Select a homepage in Settings before previewing the site.', 400);
     const homeIndex = selectedHome

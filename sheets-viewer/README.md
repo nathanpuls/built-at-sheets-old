@@ -29,7 +29,7 @@ Both tabs are optional. Changes to these cells participate in the same live upda
 
 ## ends.at homepage and collections
 
-On `live.ends.at`, `Settings` → `Homepage` is the only root-page selector. A Page named `home` is an ordinary `/home` page unless that exact cell is selected; there is no fallback homepage slug.
+On `live.ends.at`, `Settings` → `Homepage` is the only root-page selector. Page URLs are derived from their names (`About Ends` becomes `/about-ends`). A Page named `home` is an ordinary `/home` page unless that exact cell is selected; there is no fallback homepage slug.
 
 A Page and a worksheet with the same name form a collection. For example, the `posts` Page and `Posts` worksheet generate one detail URL per worksheet row under `/posts/<title-slug>`. Column A is HTML, Markdown, text or a redirect; column B is the title. Titles are converted to lowercase hyphenated URL slugs, and duplicate generated slugs are rejected. Detail URLs remain available even if the parent Page contains no collection element.
 

@@ -86,6 +86,7 @@ test('ends.at collections create stable post routes, optional templates and hidd
       case '100': return new Response(csv([
         ['Content', 'Page'],
         ['<h1>Old home slug</h1>', 'home'],
+        ['<h1>Named page</h1>', 'about ends'],
         [postsPage, 'posts']
       ]));
       case '200': return new Response(csv([
@@ -109,6 +110,7 @@ test('ends.at collections create stable post routes, optional templates and hidd
     assert.match(root, /href="\/posts\/another-post">another post<\/a>/);
     assert.doesNotMatch(root, /Old home slug/);
     assert.match(await (await view('/home')).text(), /Old home slug/);
+    assert.match(await (await view('/about-ends')).text(), /Named page/);
 
     const detail = await (await view('/posts/another-post')).text();
     assert.match(detail, /<h1>Another post<\/h1>/);
