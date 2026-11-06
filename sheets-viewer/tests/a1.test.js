@@ -75,7 +75,7 @@ test('shared CSS and menu settings apply across pages and trigger live updates',
 test('ends.at collections create stable post routes, optional templates and hidden indexes', async () => {
   const original = global.fetch;
   const csv = rows => rows.map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\r\n');
-  let postsPage = '<section><h1>Posts</h1><collection source="Posts"><template><a class="post-card" href="{{url}}">{{title}}</a></template></collection></section>';
+  let postsPage = '<section><component name="heading"></component><collection source="Posts"><template><a class="post-card" href="{{url}}">{{title}}</a></template></collection></section>';
   let secondPost = '# Another post\n\nChanged independently.';
   global.fetch = async input => {
     const url = new URL(input);
@@ -102,7 +102,9 @@ test('ends.at collections create stable post routes, optional templates and hidd
         ['homepage', 'Homepage', '', 'posts']
       ]));
       case '300': return new Response(csv([
-        ['Name', 'Visibility', 'Content'],
+        ['Name', 'Visibility', 'Content', 'Scope'],
+        ['heading', 'TRUE', '<h1><component name="heading-text"></component></h1>', 'Component'],
+        ['heading-text', 'TRUE', '<strong>Nested posts heading</strong>', 'Component'],
         ['css', 'FALSE', 'body { color: red }'],
         ['visible', 'Show', '<footer>Visible component</footer>'],
         ['hidden', 'Hide', '<footer>Hidden component</footer>']
@@ -113,6 +115,7 @@ test('ends.at collections create stable post routes, optional templates and hidd
   const view = path => onRequestGet({request:new Request(`https://live.ends.at${path}?id=abcdefghijklmnopqrst&slug=${path.replace(/^\/+/, '') || 'home'}&live=0`)});
   try {
     const root = await (await view('/')).text();
+    assert.match(root, /<h1><strong>Nested posts heading<\/strong><\/h1>/);
     assert.match(root, /class="post-card" href="\/posts\/post1">post1<\/a>/);
     assert.match(root, /href="\/posts\/another-post">another post<\/a>/);
     assert.doesNotMatch(root, /Old home slug|secret|Hidden component|color: red/);
