@@ -66,6 +66,64 @@ function addSharedComponents(html, components) {
   return closing ? html.slice(0, closing.index) + markup + html.slice(closing.index) : html + markup;
 }
 
+
+function siteSettings(rows) {
+  const values = new Map(rows.map(([key = '', value = '']) => [key.trim().toLowerCase(), value.trim()]));
+  return {
+    logo: values.get('logo') || values.get('favicon') || '',
+    name: values.get('site name') || '',
+    description: values.get('seo description') || ''
+  };
+}
+
+function addSiteSettings(html, settings) {
+  const escape = value => value.replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[char]);
+  let tags = '';
+  if (settings.logo) {
+    html = html.replace(/<link\b(?=[^>]*\brel\s*=\s*(?:"(?:shortcut )?icon"|'(?:shortcut )?icon'|icon(?=[\s/>])))[^>]*>/gi, '');
+    tags += '<link rel="icon" href="/_assets/logo">';
+  }
+  if (settings.name) {
+    if (!/<title\b/i.test(html)) tags += '<title>' + escape(settings.name) + '</title>';
+    tags += '<meta property="og:site_name" content="' + escape(settings.name) + '">';
+  }
+  if (settings.description && !/<meta\b[^>]*\bname\s*=\s*["']?description\b/i.test(html)) {
+    tags += '<meta name="description" content="' + escape(settings.description) + '">';
+  }
+  return html.replace(/^(?:\s*<!doctype[^>]*>)?(?:\s*<html\b[^>]*>)?(?:\s*<head\b[^>]*>)?/i, start => start + tags);
+}
+
+async function previewLogo(value, method) {
+  const missing = () => new Response(null, {status:404, headers:{'cache-control':'no-store'}});
+  if (!value) return missing();
+  let url = new URL(value);
+  if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) return missing();
+  if (url.hostname === 'drive.google.com') {
+    const file = /^\/file\/d\/([\w-]+)/.exec(url.pathname)?.[1]
+      || (/^\/(?:open|uc)$/.test(url.pathname) ? url.searchParams.get('id') : '');
+    if (file && /^[\w-]+$/.test(file)) {
+      const resourceKey = url.searchParams.get('resourcekey');
+      url = new URL('https://drive.google.com/uc?export=download');
+      url.searchParams.set('id', file);
+      if (resourceKey) url.searchParams.set('resourcekey', resourceKey);
+    }
+  }
+  const response = await fetch(url, sheetFetchOptions());
+  if (!response.ok) return missing();
+  const bytes = await response.arrayBuffer();
+  if (!bytes.byteLength || bytes.byteLength > 25 * 1024 * 1024) return missing();
+  const prefix = new TextDecoder().decode(bytes.slice(0, 4096));
+  const svg = /^(?:\s|\uFEFF|<\?xml[\s\S]*?\?>|<!--[\s\S]*?-->)*<svg(?:\s|>)/i.test(prefix);
+  const type = svg ? 'image/svg+xml' : (response.headers.get('content-type') || '').split(';')[0].trim();
+  if (!/^image\/[a-z0-9.+-]+$/i.test(type)) return missing();
+  return new Response(method === 'HEAD' ? null : bytes, {headers:{
+    'content-type':type,
+    'cache-control':'no-store',
+    'x-content-type-options':'nosniff',
+    'content-security-policy':"sandbox; default-src 'none'; style-src 'unsafe-inline'"
+  }});
+}
+
 function error(message,status){return new Response(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sheet preview</title></head><body style="font:16px/1.6 system-ui;padding:24px;max-width:650px;margin:auto"><p>${message}</p></body></html>`,{status,headers});}
 
 export async function onRequestGet({request}){
@@ -77,6 +135,11 @@ export async function onRequestGet({request}){
   const gid=params.get('gid');
   if(gid!==null&&!/^\d+$/.test(gid))return error('The worksheet ID must be a number.',400);
   try {
+    if (dedicated && params.get('slug') === '_assets/logo') {
+      const tabs = await sheetTabs(id);
+      const settings = siteSettings(await optionalTabRows(id, tabs, 'settings', 'A:B'));
+      return await previewLogo(settings.logo, request.method);
+    }
     const [rows, tabs] = await Promise.all([
       sheetRows(id, gid, 'A:B').catch(() => null),
       sheetTabs(id)
@@ -84,7 +147,7 @@ export async function onRequestGet({request}){
     if (!rows) return error('Could not read A1. Share the Google Sheet as “Anyone with the link can view,” then refresh.',502);
     const [themeRows, settingsRows, sharedRows] = await Promise.all([
       optionalTabRows(id, tabs, 'theme', 'A1'),
-      optionalTabRows(id, tabs, 'settings', 'A1:B1'),
+      optionalTabRows(id, tabs, 'settings', dedicated ? 'A:B' : 'A1:B1'),
       optionalTabRows(id, tabs, 'shared', 'A:B')
     ]);
     const shared = sharedRows.filter(([code = '', name = ''], index) =>
@@ -95,7 +158,8 @@ export async function onRequestGet({request}){
     const [menuLabel = '', menuValue = ''] = settingsRows[0] ?? [];
     const hideMenu = menuLabel.trim().toLowerCase() === 'show default menu'
       && /^(?:false|off|no|0)$/i.test(menuValue.trim());
-    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([rows, css, hideMenu, components])));
+    const settings = dedicated ? siteSettings(settingsRows) : null;
+    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([rows, css, hideMenu, components, settings])));
     const revision=[...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
     if(params.get('live')==='check')return Response.json({revision},{headers:{'cache-control':'no-store','access-control-allow-origin':'*'}});
     const slug=params.has('slug')?normalizeSlug(params.get('slug')):null;
@@ -125,6 +189,7 @@ export async function onRequestGet({request}){
     const utilityScriptUrl=new URL('/utility-client.js',request.url);utilityScriptUrl.searchParams.set('v','20261105-1000ms');
     let html=addSharedComponents(addTheme(getRenderableHtml(content),css),components);
     if (dedicated) {
+      html = addSiteSettings(html, settings);
       const entries = rows.flatMap(([code = '', name = '']) => {
         const slug = name.trim().replace(/^\/+|\/+$/g, '');
         if (!code.trim() || !name.trim() || (code.trim().toLowerCase() === 'content' && slug.toLowerCase() === 'slug')) return [];
