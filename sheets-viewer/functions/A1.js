@@ -59,6 +59,13 @@ function addTheme(html, css) {
   return html.slice(0, endOfPreamble) + style + html.slice(endOfPreamble);
 }
 
+function addSharedComponents(html, components) {
+  if (!components.length) return html;
+  const markup = components.join('\n');
+  const closing = [...html.matchAll(/<\/body\s*>/gi)].at(-1);
+  return closing ? html.slice(0, closing.index) + markup + html.slice(closing.index) : html + markup;
+}
+
 function error(message,status){return new Response(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sheet preview</title></head><body style="font:16px/1.6 system-ui;padding:24px;max-width:650px;margin:auto"><p>${message}</p></body></html>`,{status,headers});}
 
 export async function onRequestGet({request}){
@@ -73,15 +80,20 @@ export async function onRequestGet({request}){
       sheetTabs(id)
     ]);
     if (!rows) return error('Could not read A1. Share the Google Sheet as “Anyone with the link can view,” then refresh.',502);
-    const [themeRows, settingsRows] = await Promise.all([
+    const [themeRows, settingsRows, sharedRows] = await Promise.all([
       optionalTabRows(id, tabs, 'theme', 'A1'),
-      optionalTabRows(id, tabs, 'settings', 'A1:B1')
+      optionalTabRows(id, tabs, 'settings', 'A1:B1'),
+      optionalTabRows(id, tabs, 'shared', 'A:B')
     ]);
-    const css = themeRows[0]?.[0] ?? '';
+    const shared = sharedRows.filter(([code = '', name = ''], index) =>
+      code.trim() && name.trim() && !(index === 0 && /^(?:code|content)$/i.test(code.trim()) && /^name$/i.test(name.trim())));
+    const isCss = ([, name]) => name.trim().toLowerCase() === 'css';
+    const css = [themeRows[0]?.[0] ?? '', ...shared.filter(isCss).map(([code]) => code)].filter(Boolean).join('\n');
+    const components = shared.filter(row => !isCss(row)).map(([code]) => code);
     const [menuLabel = '', menuValue = ''] = settingsRows[0] ?? [];
     const hideMenu = menuLabel.trim().toLowerCase() === 'show default menu'
       && /^(?:false|off|no|0)$/i.test(menuValue.trim());
-    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([rows, css, hideMenu])));
+    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([rows, css, hideMenu, components])));
     const revision=[...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
     if(params.get('live')==='check')return Response.json({revision},{headers:{'cache-control':'no-store','access-control-allow-origin':'*'}});
     const slug=params.has('slug')?normalizeSlug(params.get('slug')):null;
@@ -106,7 +118,7 @@ export async function onRequestGet({request}){
       items.splice(copyIndex<0?0:copyIndex+1,0,{label:'Edit Sheet',href:editUrl.href});
     }
     const utilityScriptUrl=new URL('/utility-client.js',request.url);utilityScriptUrl.searchParams.set('v','20261105-1000ms');
-    let html=injectUtilityMenu(addTheme(getRenderableHtml(content),css),{source:content,items,scriptUrl:utilityScriptUrl.href});
+    let html=injectUtilityMenu(addSharedComponents(addTheme(getRenderableHtml(content),css),components),{source:content,items,scriptUrl:utilityScriptUrl.href});
     if(params.get('live')!=='0'){
       const checkUrl=new URL(request.url);checkUrl.searchParams.set('live','check');
       const config=JSON.stringify({revision,checkUrl:checkUrl.href}).replace(/</g,'\\u003c');
