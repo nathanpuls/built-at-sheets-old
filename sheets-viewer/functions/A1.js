@@ -344,7 +344,7 @@ export async function onRequestGet({request}){
         const slug = dedicated ? pageSlug(name) : name.trim().replace(/^\/+|\/+$/g, '');
         if (!code.trim() || !name.trim() || (code.trim().toLowerCase() === 'content' && slug.toLowerCase() === 'slug')) return [];
         const isHome = Boolean(selectedHome) && index === homeIndex;
-        return [{label: isHome ? 'Home' : slug.replace(/[-_]/g, ' '), href: isHome ? '/' : '/' + slug}];
+        return [{label: name.trim().replace(/[-_]/g, ' '), href: isHome ? '/' : '/' + slug}];
       });
       const homePosition = entries.findIndex(page => page.href === '/');
       if (homePosition > 0) entries.unshift(entries.splice(homePosition, 1)[0]);
