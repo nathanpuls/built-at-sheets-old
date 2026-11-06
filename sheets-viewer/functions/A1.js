@@ -54,6 +54,7 @@ function contentTable(rows) {
   const content = headers.findIndex(value => /^(?:code|(?:post )?content)$/.test(value));
   const name = headers.findIndex(value => /^(?:name|page|slug|(?:post )?title)$/.test(value));
   if (content < 0 || name < 0) return {rows, column: 'A'};
+  const hidden = headers.indexOf('hidden');
   const visibility = headers.indexOf('visibility');
   const scope = headers.indexOf('scope');
   let column = '';
@@ -62,7 +63,9 @@ function contentTable(rows) {
   }
   return {
     column,
-    rows: rows.map((row, index) => index === 0 || /^(?:false|hide)$/i.test(row[visibility]?.trim() || '')
+    rows: rows.map((row, index) => index === 0 || (hidden >= 0
+        ? /^true$/i.test(row[hidden]?.trim() || '')
+        : /^(?:false|hide)$/i.test(row[visibility]?.trim() || ''))
       ? []
       : [row[content] || '', row[name] || '', row[scope]?.trim().toLowerCase()])
   };
