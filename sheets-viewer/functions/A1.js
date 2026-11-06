@@ -71,15 +71,15 @@ const endsSettingsGid = '990299918';
 
 function siteSettings(rows) {
   const values = new Map();
-  for (const [label = '', raw = ''] of rows) {
-    const key = label.trim().toLowerCase();
+  for (const [label = '', raw = '', , id = ''] of rows) {
+    const key = (id.trim() || label.trim()).toLowerCase().replace(/\s+/g, '-');
     const value = raw.trim();
     if (value && !values.has(key)) values.set(key, value);
   }
   return {
     logo: values.get('logo') || values.get('favicon') || '',
-    name: values.get('site name') || '',
-    description: values.get('seo description') || ''
+    name: values.get('site-name') || '',
+    description: values.get('seo-description') || ''
   };
 }
 
@@ -143,7 +143,7 @@ export async function onRequestGet({request}){
   if(gid!==null&&!/^\d+$/.test(gid))return error('The worksheet ID must be a number.',400);
   try {
     if (dedicated && params.get('slug') === '_assets/logo') {
-      const settings = siteSettings(await sheetRows(id, endsSettingsGid, 'A:B'));
+      const settings = siteSettings(await sheetRows(id, endsSettingsGid, 'A:D'));
       return await previewLogo(settings.logo, request.method);
     }
     const [rows, tabs] = await Promise.all([
@@ -153,7 +153,7 @@ export async function onRequestGet({request}){
     if (!rows) return error('Could not read A1. Share the Google Sheet as “Anyone with the link can view,” then refresh.',502);
     const [themeRows, settingsRows, sharedRows] = await Promise.all([
       optionalTabRows(id, tabs, 'theme', 'A1'),
-      dedicated ? sheetRows(id, endsSettingsGid, 'A:B') : optionalTabRows(id, tabs, 'settings', 'A1:B1'),
+      dedicated ? sheetRows(id, endsSettingsGid, 'A:D') : optionalTabRows(id, tabs, 'settings', 'A1:B1'),
       optionalTabRows(id, tabs, 'shared', 'A:B')
     ]);
     const shared = sharedRows.filter(([code = '', name = ''], index) =>
