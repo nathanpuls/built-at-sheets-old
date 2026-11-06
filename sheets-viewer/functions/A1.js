@@ -70,7 +70,12 @@ function addSharedComponents(html, components) {
 const endsSettingsGid = '990299918';
 
 function siteSettings(rows) {
-  const values = new Map(rows.map(([key = '', value = '']) => [key.trim().toLowerCase(), value.trim()]));
+  const values = new Map();
+  for (const [label = '', raw = ''] of rows) {
+    const key = label.trim().toLowerCase();
+    const value = raw.trim();
+    if (value && !values.has(key)) values.set(key, value);
+  }
   return {
     logo: values.get('logo') || values.get('favicon') || '',
     name: values.get('site name') || '',
