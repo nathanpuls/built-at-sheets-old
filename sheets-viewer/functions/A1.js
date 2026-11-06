@@ -128,14 +128,14 @@ function collectionItems(rows, source, parentSlug) {
   return items;
 }
 
-function renderCollectionTags(content, collections) {
+function expandCollectionTags(content, collections) {
   return String(content).replace(/<collection\b([^>]*)>([\s\S]*?)<\/collection\s*>/gi, (tag, attributes, body) => {
     const match = /\bsource\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i.exec(attributes);
     const source = (match?.[1] || match?.[2] || match?.[3] || '').trim();
     const collection = collections.get(source.toLowerCase());
     if (!collection) throw Object.assign(new Error(`Collection source “${source || '(missing)'}” was not found.`), {status:400});
     const authored = /<template\b[^>]*>([\s\S]*?)<\/template\s*>/i.exec(body)?.[1];
-    const template = authored || '<article><a href="{{url}}">{{title}}</a></article>';
+    const template = authored || '<div><a href="{{url}}">{{title}}</a></div>';
     const items = collection.items.map(item => template.replace(/{{\s*(title|slug|url)\s*}}/gi, (_, field) => escapeCollectionValue(item[field.toLowerCase()]))).join('\n');
     return `<div data-collection="${escapeCollectionValue(collection.source)}">${items}</div>`;
   });
@@ -308,7 +308,7 @@ export async function onRequestGet({request}){
         activeIndex = matches[0].item.rowIndex;
         activeColumn = matches[0].collection.column;
       } else {
-        content = renderCollectionTags(content, collections);
+        content = expandCollectionTags(content, collections);
       }
     }
     const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([rows, css, hideMenu, components, settings, collectionRevision])));
