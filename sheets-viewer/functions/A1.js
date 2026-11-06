@@ -34,7 +34,7 @@ async function sheetTabs(id) {
 async function sheetRows(id, gid, range) {
   const url = new URL(`https://docs.google.com/spreadsheets/d/${id}/export`);
   url.searchParams.set('format', 'csv');
-  url.searchParams.set('range', range);
+  if (range) url.searchParams.set('range', range);
   url.searchParams.set('_', crypto.randomUUID());
   if (gid !== null) url.searchParams.set('gid', gid);
   const response = await fetch(url, sheetFetchOptions());
@@ -47,6 +47,24 @@ async function sheetRows(id, gid, range) {
 function optionalTabRows(id, tabs, name, range) {
   const tab = tabs.find(tab => tab.name.toLowerCase() === name);
   return tab ? sheetRows(id, tab.gid, range) : [];
+}
+
+function contentTable(rows) {
+  const headers = (rows[0] || []).map(value => value.trim().toLowerCase());
+  const content = headers.findIndex(value => /^(?:code|(?:post )?content)$/.test(value));
+  const name = headers.findIndex(value => /^(?:name|page|slug|(?:post )?title)$/.test(value));
+  if (content < 0 || name < 0) return {rows, column: 'A'};
+  const visibility = headers.indexOf('visibility');
+  let column = '';
+  for (let index = content + 1; index > 0; index = Math.floor((index - 1) / 26)) {
+    column = String.fromCharCode(65 + (index - 1) % 26) + column;
+  }
+  return {
+    column,
+    rows: rows.map((row, index) => index === 0 || /^hide$/i.test(row[visibility]?.trim() || '')
+      ? []
+      : [row[content] || '', row[name] || ''])
+  };
 }
 
 function addTheme(html, css) {
@@ -100,7 +118,7 @@ function collectionItems(rows, source, parentSlug) {
   rows.forEach(([content = '', title = ''], index) => {
     if (index === 0 && /content/i.test(content.trim()) && /(?:title|name)/i.test(title.trim())) return;
     if (!content.trim() && !title.trim()) return;
-    if (!title.trim()) throw Object.assign(new Error(`${source} row ${index + 1} needs a title in column B.`), {status:400});
+    if (!title.trim()) throw Object.assign(new Error(`${source} row ${index + 1} needs a title.`), {status:400});
     const slug = collectionSlug(title);
     if (!slug) throw Object.assign(new Error(`${source} row ${index + 1} needs a title that can form a URL.`), {status:400});
     if (slugs.has(slug)) throw Object.assign(new Error(`${source} has more than one post using the URL slug “${slug}”.`), {status:400});
@@ -128,7 +146,15 @@ const endsSettingsGid = '990299918';
 
 function siteSettings(rows) {
   const values = new Map();
-  for (const [label = '', raw = '', , id = ''] of rows) {
+  const headers = (rows[0] || []).map(value => value.trim().toLowerCase());
+  const labelColumn = headers.findIndex(value => value === 'name' || value === 'setting');
+  const valueColumn = headers.findIndex(value => value === 'content' || value === 'value');
+  const idColumn = headers.indexOf('id');
+  const hasHeaders = labelColumn >= 0 && valueColumn >= 0;
+  for (const row of hasHeaders ? rows.slice(1) : rows) {
+    const label = row[hasHeaders ? labelColumn : 0] || '';
+    const raw = row[hasHeaders ? valueColumn : 1] || '';
+    const id = row[hasHeaders ? idColumn : 3] || '';
     const key = (id.trim() || label.trim()).toLowerCase().replace(/\s+/g, '-');
     const value = raw.trim();
     if (value && !values.has(key)) values.set(key, value);
@@ -201,19 +227,19 @@ export async function onRequestGet({request}){
   if(gid!==null&&!/^\d+$/.test(gid))return error('The worksheet ID must be a number.',400);
   try {
     if (dedicated && params.get('slug') === '_assets/logo') {
-      const settings = siteSettings(await sheetRows(id, endsSettingsGid, 'A:D'));
+      const settings = siteSettings(await sheetRows(id, endsSettingsGid, null));
       return await previewLogo(settings.logo, request.method);
     }
     const tabs = await sheetTabs(id);
     const sourceGid = gid ?? (dedicated ? tabs.find(tab => tab.name === 'Pages')?.gid : tabs[0]?.gid);
-    const rows = await sheetRows(id, sourceGid ?? null, 'A:B').catch(() => null);
+    const rows = await sheetRows(id, sourceGid ?? null, dedicated ? null : 'A:B').catch(() => null);
     if (!rows) return error('Could not read A1. Share the Google Sheet as “Anyone with the link can view,” then refresh.',502);
     const [themeRows, settingsRows, sharedRows] = await Promise.all([
       optionalTabRows(id, tabs, 'theme', 'A1'),
-      dedicated ? sheetRows(id, endsSettingsGid, 'A:D') : optionalTabRows(id, tabs, 'settings', 'A1:B1'),
-      optionalTabRows(id, tabs, 'shared', 'A:B')
+      dedicated ? sheetRows(id, endsSettingsGid, null) : optionalTabRows(id, tabs, 'settings', 'A1:B1'),
+      optionalTabRows(id, tabs, 'shared', dedicated ? null : 'A:B')
     ]);
-    const shared = sharedRows.filter(([code = '', name = ''], index) =>
+    const shared = (dedicated ? contentTable(sharedRows).rows : sharedRows).filter(([code = '', name = ''], index) =>
       code.trim() && name.trim() && !(index === 0 && /^(?:code|content)$/i.test(code.trim()) && /^name$/i.test(name.trim())));
     const isCss = ([, name]) => name.trim().toLowerCase() === 'css';
     const css = [themeRows[0]?.[0] ?? '', ...shared.filter(isCss).map(([code]) => code)].filter(Boolean).join('\n');
@@ -226,8 +252,8 @@ export async function onRequestGet({request}){
     let pages=new Map();try{pages=pagesFromTable({rows:rows.map(row=>({c:row.slice(0,2).map(v=>({v}))}))});}catch{if(!dedicated&&slug!==null)return error('Page slugs must be valid and unique in column B.',400);}
     if(!dedicated&&slug!==null&&!pages.has(slug))return error('This page slug was not found in column B.',404);
     const pathSlug = normalizeSlug(params.get('slug'));
-    const hasPageHeader = dedicated && /^page$/i.test(rows[0]?.[1]?.trim() ?? '');
-    const pageRows = hasPageHeader ? rows.slice(1) : rows;
+    const pageTable = dedicated ? contentTable(rows) : {rows, column: 'A'};
+    const pageRows = pageTable.rows;
     const pageSlug = name => String(name).trim().replace(/^\/+|\/+$/g, '').split('/').filter(Boolean).map(collectionSlug).join('/');
     const selectedHome = dedicated ? pageSlug(settings.homepage) : '';
     if (dedicated && requestUrl.pathname === '/' && !selectedHome) return error('Select a homepage in Settings before previewing the site.', 400);
@@ -246,13 +272,14 @@ export async function onRequestGet({request}){
       pageIndex = pageRows.findIndex(([, name = '']) => pageSlug(name) === parent);
     }
     const sourceIndex = dedicated
-      ? (pageIndex < 0 ? -1 : pageIndex + Number(hasPageHeader))
+      ? pageIndex
       : slug === null ? 0 : rows.findIndex(row => normalizeSlug(row[1]) === slug);
     if (dedicated && pageIndex < 0) return error('This page was not found.', 404);
-    let content = dedicated ? (rows[sourceIndex]?.[0] ?? '') : slug === null ? rows[0]?.[0] || '' : pages.get(slug).content;
+    let content = dedicated ? (pageRows[sourceIndex]?.[0] ?? '') : slug === null ? rows[0]?.[0] || '' : pages.get(slug).content;
     let sourceContent = content;
     let activeGid = sourceGid;
     let activeIndex = sourceIndex;
+    let activeColumn = pageTable.column;
     const collections = new Map();
     const collectionRevision = [];
     if (dedicated && pageIndex >= 0) {
@@ -263,8 +290,9 @@ export async function onRequestGet({request}){
       for (const source of sourceNames) {
         const tab = tabs.find(candidate => candidate.name.toLowerCase() === source.toLowerCase());
         if (!tab) return error(`Collection source “${source}” was not found.`, 400);
-        const collectionRows = await sheetRows(id, tab.gid, 'A:B');
-        const collection = {source:tab.name, gid:tab.gid, rows:collectionRows, items:collectionItems(collectionRows, tab.name, parent)};
+        const collectionRows = await sheetRows(id, tab.gid, null);
+        const table = contentTable(collectionRows);
+        const collection = {source:tab.name, gid:tab.gid, column:table.column, items:collectionItems(table.rows, tab.name, parent)};
         collections.set(tab.name.toLowerCase(), collection);
         collectionRevision.push([tab.name, collectionRows]);
       }
@@ -278,6 +306,7 @@ export async function onRequestGet({request}){
         sourceContent = content;
         activeGid = matches[0].collection.gid;
         activeIndex = matches[0].item.rowIndex;
+        activeColumn = matches[0].collection.column;
       } else {
         content = renderCollectionTags(content, collections);
       }
@@ -298,7 +327,7 @@ export async function onRequestGet({request}){
     if (activeGid != null && activeIndex >= 0) {
       const url=new URL(`https://docs.google.com/spreadsheets/d/${encodeURIComponent(id)}/edit`);
       url.searchParams.set('gid', activeGid);
-      url.hash = new URLSearchParams({gid:activeGid, range:`A${activeIndex + 1}`}).toString();
+      url.hash = new URLSearchParams({gid:activeGid, range:`${activeColumn}${activeIndex + 1}`}).toString();
       editUrl = url.href;
     }
     if (items.length && editUrl) {
@@ -312,7 +341,7 @@ export async function onRequestGet({request}){
     }
     if (dedicated || components.some(component => component.includes('ends-nav-data'))) {
       const entries = pageRows.flatMap(([code = '', name = ''], index) => {
-        const slug = name.trim().replace(/^\/+|\/+$/g, '');
+        const slug = dedicated ? pageSlug(name) : name.trim().replace(/^\/+|\/+$/g, '');
         if (!code.trim() || !name.trim() || (code.trim().toLowerCase() === 'content' && slug.toLowerCase() === 'slug')) return [];
         const isHome = Boolean(selectedHome) && index === homeIndex;
         return [{label: isHome ? 'Home' : slug.replace(/[-_]/g, ' '), href: isHome ? '/' : '/' + slug}];
