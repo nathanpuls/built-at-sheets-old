@@ -124,6 +124,15 @@ export async function onRequestGet({request}){
     }
     const utilityScriptUrl=new URL('/utility-client.js',request.url);utilityScriptUrl.searchParams.set('v','20261105-1000ms');
     let html=addSharedComponents(addTheme(getRenderableHtml(content),css),components);
+    if (dedicated) {
+      const entries = rows.flatMap(([code = '', name = '']) => {
+        const slug = name.trim().replace(/^\/+|\/+$/g, '');
+        if (!code.trim() || !name.trim() || (code.trim().toLowerCase() === 'content' && slug.toLowerCase() === 'slug')) return [];
+        return [{label: !slug || slug === 'home' ? 'Home' : slug.replace(/[-_]/g, ' '), href: !slug || slug === 'home' ? '/' : '/' + slug}];
+      });
+      const data = JSON.stringify({pages: entries, source: content}).replace(/</g, '\\u003c');
+      html = addSharedComponents(html, [`<script type="application/json" id="ends-nav-data">${data}</script>`]);
+    }
     if (!dedicated) html=injectUtilityMenu(html,{source:content,items,scriptUrl:utilityScriptUrl.href});
     if(params.get('live')!=='0'){
       const checkUrl=new URL(request.url);checkUrl.searchParams.set('live','check');
