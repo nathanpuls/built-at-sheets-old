@@ -84,22 +84,29 @@ test('ends.at collections create stable post routes, optional templates and hidd
     ].map(([name, gid]) => `items.push({name: "${name}", pageUrl: "/htmlview", gid: "${gid}"});`).join('\n'));
     switch (url.searchParams.get('gid')) {
       case '100': return new Response(csv([
-        ['Content', 'Page'],
-        ['<h1>Old home slug</h1>', 'home'],
-        ['<h1>Named page</h1>', 'about ends'],
-        [postsPage, 'posts']
+        ['Name', 'Content', 'Visibility'],
+        ['home', '<h1>Old home slug</h1>', 'Show'],
+        ['secret', '<h1>Hidden page</h1>', 'Hide'],
+        ['about ends', '<h1>Named page</h1>'],
+        ['posts', postsPage, 'Show']
       ]));
       case '200': return new Response(csv([
-        ['Post Content', 'Post Title'],
-        ['This is a post', 'post1'],
-        [secondPost, 'another post'],
-        ['<article><h2>A Third Post</h2></article>', 'a third post']
+        ['Visibility', 'Name', 'Content'],
+        ['Show', 'post1', 'This is a post'],
+        ['Show', 'another post', secondPost],
+        ['Hide', 'secret-post', 'Hidden post'],
+        ['', 'a third post', '<article><h2>A Third Post</h2></article>']
       ]));
       case '990299918': return new Response(csv([
-        ['Setting', 'Value', 'Purpose', 'ID'],
-        ['Homepage', 'posts', '', 'homepage']
+        ['ID', 'Name', 'Description', 'Content'],
+        ['homepage', 'Homepage', '', 'posts']
       ]));
-      case '300': return new Response('');
+      case '300': return new Response(csv([
+        ['Name', 'Visibility', 'Content'],
+        ['css', 'Hide', 'body { color: red }'],
+        ['visible', 'Show', '<footer>Visible component</footer>'],
+        ['hidden', 'Hide', '<footer>Hidden component</footer>']
+      ]));
       default: throw new Error('Unexpected Sheet request: ' + url.href);
     }
   };
@@ -108,13 +115,18 @@ test('ends.at collections create stable post routes, optional templates and hidd
     const root = await (await view('/')).text();
     assert.match(root, /class="post-card" href="\/posts\/post1">post1<\/a>/);
     assert.match(root, /href="\/posts\/another-post">another post<\/a>/);
-    assert.doesNotMatch(root, /Old home slug/);
+    assert.doesNotMatch(root, /Old home slug|secret|Hidden component|color: red/);
+    assert.match(root, /Visible component/);
+    assert.match(root, /range=B5/);
+    assert.equal((await view('/secret')).status, 404);
+    assert.equal((await view('/posts/secret-post')).status, 404);
     assert.match(await (await view('/home')).text(), /Old home slug/);
     assert.match(await (await view('/about-ends')).text(), /Named page/);
 
     const detail = await (await view('/posts/another-post')).text();
     assert.match(detail, /<h1>Another post<\/h1>/);
     assert.match(detail, /Changed independently/);
+    assert.match(detail, /range=C3/);
 
     postsPage = '<section><h1>Posts without an index</h1></section>';
     const hidden = await (await view('/posts')).text();
