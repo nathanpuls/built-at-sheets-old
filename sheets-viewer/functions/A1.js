@@ -148,7 +148,7 @@ export async function onRequestGet({request}){
     }
     const tabs = await sheetTabs(id);
     const sourceGid = gid ?? (dedicated ? tabs.find(tab => tab.name === 'Pages')?.gid : tabs[0]?.gid);
-    const rows = await sheetRows(id, sourceGid ?? null, 'A:B').catch(() => null);
+    const rows = await sheetRows(id, sourceGid ?? null, dedicated ? 'A:C' : 'A:B').catch(() => null);
     if (!rows) return error('Could not read A1. Share the Google Sheet as “Anyone with the link can view,” then refresh.',502);
     const [themeRows, settingsRows, sharedRows] = await Promise.all([
       optionalTabRows(id, tabs, 'theme', 'A1'),
@@ -171,10 +171,20 @@ export async function onRequestGet({request}){
     let pages=new Map();try{pages=pagesFromTable({rows:rows.map(row=>({c:row.slice(0,2).map(v=>({v}))}))});}catch{if(!dedicated&&slug!==null)return error('Page slugs must be valid and unique in column B.',400);}
     if(!dedicated&&slug!==null&&!pages.has(slug))return error('This page slug was not found in column B.',404);
     const pathSlug = params.get('slug');
+    const hasPageHeader = dedicated && /^page$/i.test(rows[0]?.[1]?.trim() ?? '');
+    const pageRows = hasPageHeader ? rows.slice(1) : rows;
+    const pageSlug = name => name.trim().replace(/^\/+|\/+$/g, '');
+    const selectedHome = hasPageHeader ? pageSlug(rows[0][2] ?? '') : '';
+    const homeIndex = selectedHome
+      ? pageRows.findIndex(([, name = '']) => pageSlug(name) === selectedHome)
+      : -1;
+    const pageIndex = requestUrl.pathname === '/' && selectedHome
+      ? homeIndex
+      : pageRows.findIndex(([, name = '']) => pageSlug(name) === pathSlug || (!selectedHome && pathSlug === 'home' && /^\/+$/g.test(name.trim())));
     const sourceIndex = dedicated
-      ? rows.findIndex(([, name = '']) => name.trim().replace(/^\/+|\/+$/g, '') === pathSlug || (pathSlug === 'home' && /^\/+$/g.test(name.trim())))
+      ? (pageIndex < 0 ? -1 : pageIndex + Number(hasPageHeader))
       : slug === null ? 0 : rows.findIndex(row => normalizeSlug(row[1]) === slug);
-    const content = dedicated ? rows[sourceIndex]?.[0] ?? '' : slug === null ? rows[0]?.[0] || '' : pages.get(slug).content;
+    const content = dedicated ? (rows[sourceIndex]?.[0] ?? '') : slug === null ? rows[0]?.[0] || '' : pages.get(slug).content;
     if(!content.trim())return error('A1 is empty. Put HTML or Markdown in A1, then refresh this page.',404);
     const redirect=getRedirectUrl(content);
     if(redirect)return new Response(null,{status:302,headers:{...headers,location:redirect}});
@@ -201,11 +211,14 @@ export async function onRequestGet({request}){
       html = addSiteSettings(html, settings, revision);
     }
     if (dedicated || components.some(component => component.includes('ends-nav-data'))) {
-      const entries = rows.flatMap(([code = '', name = '']) => {
+      const entries = pageRows.flatMap(([code = '', name = ''], index) => {
         const slug = name.trim().replace(/^\/+|\/+$/g, '');
         if (!code.trim() || !name.trim() || (code.trim().toLowerCase() === 'content' && slug.toLowerCase() === 'slug')) return [];
-        return [{label: !slug || slug === 'home' ? 'Home' : slug.replace(/[-_]/g, ' '), href: !slug || slug === 'home' ? '/' : '/' + slug}];
+        const isHome = selectedHome ? index === homeIndex : !slug || slug === 'home';
+        return [{label: !slug || slug === 'home' ? 'Home' : slug.replace(/[-_]/g, ' '), href: isHome ? '/' : '/' + slug}];
       });
+      const homePosition = entries.findIndex(page => page.href === '/');
+      if (homePosition > 0) entries.unshift(entries.splice(homePosition, 1)[0]);
       const data = JSON.stringify({pages: entries, source: content, editUrl}).replace(/</g, '\\u003c');
       html = addSharedComponents(html, [`<script type="application/json" id="ends-nav-data">${data}</script>`]);
     }
