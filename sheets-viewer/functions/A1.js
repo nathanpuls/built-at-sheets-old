@@ -67,6 +67,8 @@ function addSharedComponents(html, components) {
 }
 
 
+const endsSettingsGid = '990299918';
+
 function siteSettings(rows) {
   const values = new Map(rows.map(([key = '', value = '']) => [key.trim().toLowerCase(), value.trim()]));
   return {
@@ -76,12 +78,12 @@ function siteSettings(rows) {
   };
 }
 
-function addSiteSettings(html, settings) {
+function addSiteSettings(html, settings, revision) {
   const escape = value => value.replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[char]);
   let tags = '';
   if (settings.logo) {
     html = html.replace(/<link\b(?=[^>]*\brel\s*=\s*(?:"(?:shortcut )?icon"|'(?:shortcut )?icon'|icon(?=[\s/>])))[^>]*>/gi, '');
-    tags += '<link rel="icon" href="/_assets/logo">';
+    tags += '<link rel="icon" href="/_assets/logo?v=' + revision + '">';
   }
   if (settings.name) {
     if (!/<title\b/i.test(html)) tags += '<title>' + escape(settings.name) + '</title>';
@@ -136,8 +138,7 @@ export async function onRequestGet({request}){
   if(gid!==null&&!/^\d+$/.test(gid))return error('The worksheet ID must be a number.',400);
   try {
     if (dedicated && params.get('slug') === '_assets/logo') {
-      const tabs = await sheetTabs(id);
-      const settings = siteSettings(await optionalTabRows(id, tabs, 'settings', 'A:B'));
+      const settings = siteSettings(await sheetRows(id, endsSettingsGid, 'A:B'));
       return await previewLogo(settings.logo, request.method);
     }
     const [rows, tabs] = await Promise.all([
@@ -147,7 +148,7 @@ export async function onRequestGet({request}){
     if (!rows) return error('Could not read A1. Share the Google Sheet as “Anyone with the link can view,” then refresh.',502);
     const [themeRows, settingsRows, sharedRows] = await Promise.all([
       optionalTabRows(id, tabs, 'theme', 'A1'),
-      optionalTabRows(id, tabs, 'settings', dedicated ? 'A:B' : 'A1:B1'),
+      dedicated ? sheetRows(id, endsSettingsGid, 'A:B') : optionalTabRows(id, tabs, 'settings', 'A1:B1'),
       optionalTabRows(id, tabs, 'shared', 'A:B')
     ]);
     const shared = sharedRows.filter(([code = '', name = ''], index) =>
@@ -189,7 +190,7 @@ export async function onRequestGet({request}){
     const utilityScriptUrl=new URL('/utility-client.js',request.url);utilityScriptUrl.searchParams.set('v','20261105-1000ms');
     let html=addSharedComponents(addTheme(getRenderableHtml(content),css),components);
     if (dedicated) {
-      html = addSiteSettings(html, settings);
+      html = addSiteSettings(html, settings, revision);
       const entries = rows.flatMap(([code = '', name = '']) => {
         const slug = name.trim().replace(/^\/+|\/+$/g, '');
         if (!code.trim() || !name.trim() || (code.trim().toLowerCase() === 'content' && slug.toLowerCase() === 'slug')) return [];
