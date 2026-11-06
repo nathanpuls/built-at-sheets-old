@@ -66,6 +66,63 @@ function addSharedComponents(html, components) {
   return closing ? html.slice(0, closing.index) + markup + html.slice(closing.index) : html + markup;
 }
 
+function escapeCollectionValue(value) {
+  return String(value).replace(/[&<>"']/g, character => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+  })[character]);
+}
+
+function collectionSlug(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function collectionSourceNames(content) {
+  const names = [];
+  const tags = String(content).matchAll(/<collection\b([^>]*)>[\s\S]*?<\/collection\s*>/gi);
+  for (const [, attributes] of tags) {
+    const match = /\bsource\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i.exec(attributes);
+    const name = (match?.[1] || match?.[2] || match?.[3] || '').trim();
+    if (name && !names.some(existing => existing.toLowerCase() === name.toLowerCase())) names.push(name);
+  }
+  return names;
+}
+
+function collectionItems(rows, source, parentSlug) {
+  const items = [];
+  const slugs = new Set();
+  rows.forEach(([content = '', title = ''], index) => {
+    if (index === 0 && /content/i.test(content.trim()) && /(?:title|name)/i.test(title.trim())) return;
+    if (!content.trim() && !title.trim()) return;
+    if (!title.trim()) throw Object.assign(new Error(`${source} row ${index + 1} needs a title in column B.`), {status:400});
+    const slug = collectionSlug(title);
+    if (!slug) throw Object.assign(new Error(`${source} row ${index + 1} needs a title that can form a URL.`), {status:400});
+    if (slugs.has(slug)) throw Object.assign(new Error(`${source} has more than one post using the URL slug “${slug}”.`), {status:400});
+    slugs.add(slug);
+    items.push({content, title:title.trim(), slug, url:'/' + [parentSlug, slug].filter(Boolean).join('/'), rowIndex:index});
+  });
+  return items;
+}
+
+function renderCollectionTags(content, collections) {
+  return String(content).replace(/<collection\b([^>]*)>([\s\S]*?)<\/collection\s*>/gi, (tag, attributes, body) => {
+    const match = /\bsource\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i.exec(attributes);
+    const source = (match?.[1] || match?.[2] || match?.[3] || '').trim();
+    const collection = collections.get(source.toLowerCase());
+    if (!collection) throw Object.assign(new Error(`Collection source “${source || '(missing)'}” was not found.`), {status:400});
+    const authored = /<template\b[^>]*>([\s\S]*?)<\/template\s*>/i.exec(body)?.[1];
+    const template = authored || '<article><a href="{{url}}">{{title}}</a></article>';
+    const items = collection.items.map(item => template.replace(/{{\s*(title|slug|url)\s*}}/gi, (_, field) => escapeCollectionValue(item[field.toLowerCase()]))).join('\n');
+    return `<div data-collection="${escapeCollectionValue(collection.source)}">${items}</div>`;
+  });
+}
+
 
 const endsSettingsGid = '990299918';
 
@@ -165,27 +222,69 @@ export async function onRequestGet({request}){
     const hideMenu = menuLabel.trim().toLowerCase() === 'show default menu'
       && /^(?:false|off|no|0)$/i.test(menuValue.trim());
     const settings = dedicated ? siteSettings(settingsRows) : null;
-    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([rows, css, hideMenu, components, settings])));
-    const revision=[...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
-    if(params.get('live')==='check')return Response.json({revision},{headers:{'cache-control':'no-store','access-control-allow-origin':'*'}});
     const slug=params.has('slug')?normalizeSlug(params.get('slug')):null;
     let pages=new Map();try{pages=pagesFromTable({rows:rows.map(row=>({c:row.slice(0,2).map(v=>({v}))}))});}catch{if(!dedicated&&slug!==null)return error('Page slugs must be valid and unique in column B.',400);}
     if(!dedicated&&slug!==null&&!pages.has(slug))return error('This page slug was not found in column B.',404);
-    const pathSlug = params.get('slug');
+    const pathSlug = normalizeSlug(params.get('slug'));
     const hasPageHeader = dedicated && /^page$/i.test(rows[0]?.[1]?.trim() ?? '');
     const pageRows = hasPageHeader ? rows.slice(1) : rows;
     const pageSlug = name => name.trim().replace(/^\/+|\/+$/g, '');
     const selectedHome = dedicated ? pageSlug(settings.homepage) : '';
+    if (dedicated && requestUrl.pathname === '/' && !selectedHome) return error('Select a homepage in Settings before previewing the site.', 400);
     const homeIndex = selectedHome
       ? pageRows.findIndex(([, name = '']) => pageSlug(name) === selectedHome)
       : -1;
-    const pageIndex = requestUrl.pathname === '/' && selectedHome
+    if (dedicated && requestUrl.pathname === '/' && homeIndex < 0) return error('The selected homepage was not found in Pages.', 400);
+    let pageIndex = requestUrl.pathname === '/'
       ? homeIndex
-      : pageRows.findIndex(([, name = '']) => pageSlug(name) === pathSlug || (!selectedHome && pathSlug === 'home' && /^\/+$/g.test(name.trim())));
+      : pageRows.findIndex(([, name = '']) => pageSlug(name) === pathSlug);
+    let detailSlug = '';
+    if (dedicated && pageIndex < 0 && pathSlug.includes('/')) {
+      const parts = pathSlug.split('/');
+      detailSlug = parts.pop();
+      const parent = parts.join('/');
+      pageIndex = pageRows.findIndex(([, name = '']) => pageSlug(name) === parent);
+    }
     const sourceIndex = dedicated
       ? (pageIndex < 0 ? -1 : pageIndex + Number(hasPageHeader))
       : slug === null ? 0 : rows.findIndex(row => normalizeSlug(row[1]) === slug);
-    const content = dedicated ? (rows[sourceIndex]?.[0] ?? '') : slug === null ? rows[0]?.[0] || '' : pages.get(slug).content;
+    if (dedicated && pageIndex < 0) return error('This page was not found.', 404);
+    let content = dedicated ? (rows[sourceIndex]?.[0] ?? '') : slug === null ? rows[0]?.[0] || '' : pages.get(slug).content;
+    let sourceContent = content;
+    let activeGid = sourceGid;
+    let activeIndex = sourceIndex;
+    const collections = new Map();
+    const collectionRevision = [];
+    if (dedicated && pageIndex >= 0) {
+      const parent = pageSlug(pageRows[pageIndex]?.[1] || '');
+      const sourceNames = collectionSourceNames(content);
+      const conventional = tabs.find(tab => tab.name.toLowerCase() === parent.split('/').at(-1)?.toLowerCase());
+      if (conventional && !sourceNames.some(name => name.toLowerCase() === conventional.name.toLowerCase())) sourceNames.push(conventional.name);
+      for (const source of sourceNames) {
+        const tab = tabs.find(candidate => candidate.name.toLowerCase() === source.toLowerCase());
+        if (!tab) return error(`Collection source “${source}” was not found.`, 400);
+        const collectionRows = await sheetRows(id, tab.gid, 'A:B');
+        const collection = {source:tab.name, gid:tab.gid, rows:collectionRows, items:collectionItems(collectionRows, tab.name, parent)};
+        collections.set(tab.name.toLowerCase(), collection);
+        collectionRevision.push([tab.name, collectionRows]);
+      }
+      if (detailSlug) {
+        const matches = [...collections.values()].flatMap(collection => collection.items
+          .filter(item => item.slug === detailSlug)
+          .map(item => ({collection, item})));
+        if (!matches.length) return error('This collection item was not found.', 404);
+        if (matches.length > 1) return error(`More than one collection item uses the URL slug “${detailSlug}”.`, 400);
+        content = matches[0].item.content;
+        sourceContent = content;
+        activeGid = matches[0].collection.gid;
+        activeIndex = matches[0].item.rowIndex;
+      } else {
+        content = renderCollectionTags(content, collections);
+      }
+    }
+    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([rows, css, hideMenu, components, settings, collectionRevision])));
+    const revision=[...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
+    if(params.get('live')==='check')return Response.json({revision},{headers:{'cache-control':'no-store','access-control-allow-origin':'*'}});
     if(!content.trim())return error('A1 is empty. Put HTML or Markdown in A1, then refresh this page.',404);
     const redirect=getRedirectUrl(content);
     if(redirect)return new Response(null,{status:302,headers:{...headers,location:redirect}});
@@ -196,10 +295,10 @@ export async function onRequestGet({request}){
     const configured=hideMenu||['0','none'].includes(params.get('menu'))?[]:undefined;
     const items=utilityItems(params.get('pages')==='0'?[]:pageLinks,configured);
     let editUrl;
-    if (sourceGid != null && sourceIndex >= 0) {
+    if (activeGid != null && activeIndex >= 0) {
       const url=new URL(`https://docs.google.com/spreadsheets/d/${encodeURIComponent(id)}/edit`);
-      url.searchParams.set('gid', sourceGid);
-      url.hash = new URLSearchParams({gid:sourceGid, range:`A${sourceIndex + 1}`}).toString();
+      url.searchParams.set('gid', activeGid);
+      url.hash = new URLSearchParams({gid:activeGid, range:`A${activeIndex + 1}`}).toString();
       editUrl = url.href;
     }
     if (items.length && editUrl) {
@@ -215,12 +314,12 @@ export async function onRequestGet({request}){
       const entries = pageRows.flatMap(([code = '', name = ''], index) => {
         const slug = name.trim().replace(/^\/+|\/+$/g, '');
         if (!code.trim() || !name.trim() || (code.trim().toLowerCase() === 'content' && slug.toLowerCase() === 'slug')) return [];
-        const isHome = selectedHome ? index === homeIndex : !slug || slug === 'home';
-        return [{label: !slug || slug === 'home' ? 'Home' : slug.replace(/[-_]/g, ' '), href: isHome ? '/' : '/' + slug}];
+        const isHome = Boolean(selectedHome) && index === homeIndex;
+        return [{label: isHome ? 'Home' : slug.replace(/[-_]/g, ' '), href: isHome ? '/' : '/' + slug}];
       });
       const homePosition = entries.findIndex(page => page.href === '/');
       if (homePosition > 0) entries.unshift(entries.splice(homePosition, 1)[0]);
-      const data = JSON.stringify({pages: entries, source: content, editUrl}).replace(/</g, '\\u003c');
+      const data = JSON.stringify({pages: entries, source: sourceContent, editUrl}).replace(/</g, '\\u003c');
       html = addSharedComponents(html, [`<script type="application/json" id="ends-nav-data">${data}</script>`]);
     }
     if (!dedicated) html=injectUtilityMenu(html,{source:content,items,scriptUrl:utilityScriptUrl.href});
@@ -233,6 +332,8 @@ export async function onRequestGet({request}){
       html=closing?html.slice(0,closing.index)+script+html.slice(closing.index):html+script;
     }
     return new Response(html,{headers});
-  }catch{return error('Google could not return A1. Refresh to try again.',502);}
+  }catch (failure) {
+    return failure?.status ? error(escapeCollectionValue(failure.message), failure.status) : error('Google could not return A1. Refresh to try again.',502);
+  }
 }
 

@@ -26,3 +26,21 @@ A Google Drive push implementation was evaluated but notifications did not arriv
 - **Settings → A1:B1** accepts `Show default menu` in A1 and `FALSE` in B1 to hide the top-right ellipsis. A Google Sheets checkbox in B1 works too. Use `TRUE` or clear B1 to show the menu again.
 
 Both tabs are optional. Changes to these cells participate in the same live updates as page edits.
+
+## ends.at homepage and collections
+
+On `live.ends.at`, `Settings` → `Homepage` is the only root-page selector. A Page named `home` is an ordinary `/home` page unless that exact cell is selected; there is no fallback homepage slug.
+
+A Page and a worksheet with the same name form a collection. For example, the `posts` Page and `Posts` worksheet generate one detail URL per worksheet row under `/posts/<title-slug>`. Column A is HTML, Markdown, text or a redirect; column B is the title. Titles are converted to lowercase hyphenated URL slugs, and duplicate generated slugs are rejected. Detail URLs remain available even if the parent Page contains no collection element.
+
+Add `<collection source="Posts"></collection>` to show a default linked index. An optional child template controls each item’s HTML and supports escaped `{{title}}`, `{{slug}}` and `{{url}}` values:
+
+```html
+<collection source="Posts">
+  <template>
+    <article><a href="{{url}}">{{title}}</a></article>
+  </template>
+</collection>
+```
+
+Removing the collection element hides only the index; it does not remove the generated detail URLs. Collection rows participate in the existing live revision check, so index and detail pages reload after Sheet edits.

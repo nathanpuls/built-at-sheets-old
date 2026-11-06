@@ -71,3 +71,84 @@ test('shared CSS and menu settings apply across pages and trigger live updates',
     global.fetch = original;
   }
 });
+
+test('ends.at collections create stable post routes, optional templates and hidden indexes', async () => {
+  const original = global.fetch;
+  const csv = rows => rows.map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\r\n');
+  let postsPage = '<section><h1>Posts</h1><collection source="Posts"><template><a class="post-card" href="{{url}}">{{title}}</a></template></collection></section>';
+  let secondPost = '# Another post\n\nChanged independently.';
+  global.fetch = async input => {
+    const url = new URL(input);
+    if (url.pathname.endsWith('/htmlview')) return new Response([
+      ['Pages', '100'], ['Posts', '200'], ['Settings', '990299918'], ['Shared', '300']
+    ].map(([name, gid]) => `items.push({name: "${name}", pageUrl: "/htmlview", gid: "${gid}"});`).join('\n'));
+    switch (url.searchParams.get('gid')) {
+      case '100': return new Response(csv([
+        ['Content', 'Page'],
+        ['<h1>Old home slug</h1>', 'home'],
+        [postsPage, 'posts']
+      ]));
+      case '200': return new Response(csv([
+        ['Post Content', 'Post Title'],
+        ['This is a post', 'post1'],
+        [secondPost, 'another post'],
+        ['<article><h2>A Third Post</h2></article>', 'a third post']
+      ]));
+      case '990299918': return new Response(csv([
+        ['Setting', 'Value', 'Purpose', 'ID'],
+        ['Homepage', 'posts', '', 'homepage']
+      ]));
+      case '300': return new Response('');
+      default: throw new Error('Unexpected Sheet request: ' + url.href);
+    }
+  };
+  const view = path => onRequestGet({request:new Request(`https://live.ends.at${path}?id=abcdefghijklmnopqrst&slug=${path.replace(/^\/+/, '') || 'home'}&live=0`)});
+  try {
+    const root = await (await view('/')).text();
+    assert.match(root, /class="post-card" href="\/posts\/post1">post1<\/a>/);
+    assert.match(root, /href="\/posts\/another-post">another post<\/a>/);
+    assert.doesNotMatch(root, /Old home slug/);
+    assert.match(await (await view('/home')).text(), /Old home slug/);
+
+    const detail = await (await view('/posts/another-post')).text();
+    assert.match(detail, /<h1>Another post<\/h1>/);
+    assert.match(detail, /Changed independently/);
+
+    postsPage = '<section><h1>Posts without an index</h1></section>';
+    const hidden = await (await view('/posts')).text();
+    assert.match(hidden, /Posts without an index/);
+    assert.doesNotMatch(hidden, /another-post/);
+    assert.match(await (await view('/posts/a-third-post')).text(), /A Third Post/);
+
+    const before = await (await onRequestGet({request:new Request('https://live.ends.at/posts/another-post?id=abcdefghijklmnopqrst&slug=posts/another-post&live=check')})).json();
+    secondPost = '# Another post\n\nA newer revision.';
+    const after = await (await onRequestGet({request:new Request('https://live.ends.at/posts/another-post?id=abcdefghijklmnopqrst&slug=posts/another-post&live=check')})).json();
+    assert.notEqual(after.revision, before.revision);
+  } finally {
+    global.fetch = original;
+  }
+});
+
+test('ends.at requires Settings to choose the root page; the home slug has no special fallback', async () => {
+  const original = global.fetch;
+  global.fetch = async input => {
+    const url = new URL(input);
+    if (url.pathname.endsWith('/htmlview')) return new Response([
+      'items.push({name: "Pages", pageUrl: "/htmlview", gid: "100"});',
+      'items.push({name: "Settings", pageUrl: "/htmlview", gid: "990299918"});'
+    ].join('\n'));
+    if (url.searchParams.get('gid') === '100') return new Response('"Content","Page"\r\n"<h1>Old default</h1>","home"');
+    if (url.searchParams.get('gid') === '990299918') return new Response('"Setting","Value","Purpose","ID"\r\n"Homepage","","","homepage"');
+    return new Response('');
+  };
+  try {
+    const root = await onRequestGet({request:new Request('https://live.ends.at/?id=abcdefghijklmnopqrst&slug=home&live=0')});
+    assert.equal(root.status, 400);
+    assert.match(await root.text(), /Select a homepage in Settings/);
+    const named = await onRequestGet({request:new Request('https://live.ends.at/home?id=abcdefghijklmnopqrst&slug=home&live=0')});
+    assert.equal(named.status, 200);
+    assert.match(await named.text(), /Old default/);
+  } finally {
+    global.fetch = original;
+  }
+});

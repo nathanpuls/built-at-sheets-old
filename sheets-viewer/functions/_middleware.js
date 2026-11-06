@@ -17,7 +17,7 @@ export function onRequest(context) {
   const check = url.searchParams.get('live') === 'check';
   url.search = '';
   url.searchParams.set('id', sheetId);
-  url.searchParams.set('slug', path || 'home');
+  url.searchParams.set('slug', path);
   if (check) url.searchParams.set('live', 'check');
   return onRequestGet({...context, request: new Request(url, context.request)});
 }
