@@ -285,7 +285,7 @@ export async function onRequestGet({request}){
     const sourceIndex = dedicated
       ? pageIndex
       : slug === null ? 0 : rows.findIndex(row => normalizeSlug(row[1]) === slug);
-    if (dedicated && pageIndex < 0) return error('This page was not found.', 404);
+    let status = dedicated && (pageIndex < 0 || pathSlug === '404') ? 404 : 200;
     let content = dedicated ? (pageRows[sourceIndex]?.[0] ?? '') : slug === null ? rows[0]?.[0] || '' : pages.get(slug).content;
     let sourceContent = content;
     let activeGid = sourceGid;
@@ -312,23 +312,33 @@ export async function onRequestGet({request}){
         const matches = [...collections.values()].flatMap(collection => collection.items
           .filter(item => item.slug === detailSlug)
           .map(item => ({collection, item})));
-        if (!matches.length) return error('This collection item was not found.', 404);
-        if (matches.length > 1) return error(`More than one collection item uses the URL slug “${detailSlug}”.`, 400);
-        sourceContent = matches[0].item.content;
-        content = expandCollectionTags(expandSharedComponents(sourceContent, named), collections);
-        activeGid = matches[0].collection.gid;
-        activeIndex = matches[0].item.rowIndex;
-        activeColumn = matches[0].collection.column;
+        if (!matches.length) status = 404;
+        else {
+          if (matches.length > 1) return error(`More than one collection item uses the URL slug “${detailSlug}”.`, 400);
+          sourceContent = matches[0].item.content;
+          content = expandCollectionTags(expandSharedComponents(sourceContent, named), collections);
+          activeGid = matches[0].collection.gid;
+          activeIndex = matches[0].item.rowIndex;
+          activeColumn = matches[0].collection.column;
+        }
       } else {
         content = expandCollectionTags(content, collections);
       }
+    }
+    if (status === 404) {
+      activeIndex = pageRows.findIndex(([body = '', name = '']) => pageSlug(name) === '404' && body.trim());
+      if (activeIndex < 0) return error('This page was not found.', 404);
+      sourceContent = pageRows[activeIndex][0];
+      content = expandSharedComponents(sourceContent, named);
+      activeGid = sourceGid;
+      activeColumn = pageTable.column;
     }
     const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([rows, css, hideMenu, components, settings, collectionRevision, content])));
     const revision=[...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
     if(params.get('live')==='check')return Response.json({revision},{headers:{'cache-control':'no-store','access-control-allow-origin':'*'}});
     if(!content.trim())return error('A1 is empty. Put HTML or Markdown in A1, then refresh this page.',404);
     const redirect=getRedirectUrl(content);
-    if(redirect)return new Response(null,{status:302,headers:{...headers,location:redirect}});
+    if(redirect && status !== 404)return new Response(null,{status:302,headers:{...headers,location:redirect}});
     const pageLinks=[...pages.values()].filter(page=>page.content.trim()).map(page=>{
       const href=new URL('/a1',request.url);href.searchParams.set('id',id);href.searchParams.set('slug',page.slug);if(gid!==null)href.searchParams.set('gid',gid);
       return {label:page.slug==='home'?'Home':page.slug.replace(/[-_]/g,' '),href:href.pathname+href.search,current:slug===page.slug||(slug===null&&page.content===content)};
@@ -354,6 +364,7 @@ export async function onRequestGet({request}){
     if (dedicated || components.some(component => component.includes('ends-nav-data'))) {
       const entries = pageRows.flatMap(([code = '', name = ''], index) => {
         const slug = dedicated ? pageSlug(name) : name.trim().replace(/^\/+|\/+$/g, '');
+        if (dedicated && slug === '404') return [];
         if (!code.trim() || !name.trim() || (code.trim().toLowerCase() === 'content' && slug.toLowerCase() === 'slug')) return [];
         const isHome = Boolean(selectedHome) && index === homeIndex;
         return [{label: name.trim().replace(/[-_]/g, ' '), href: isHome ? '/' : '/' + slug}];
@@ -372,7 +383,7 @@ export async function onRequestGet({request}){
       const closing=[...html.matchAll(/<\/body\s*>/gi)].at(-1);
       html=closing?html.slice(0,closing.index)+script+html.slice(closing.index):html+script;
     }
-    return new Response(html,{headers});
+    return new Response(html,{headers,status});
   }catch (failure) {
     return failure?.status ? error(escapeCollectionValue(failure.message), failure.status) : error('Google could not return A1. Refresh to try again.',502);
   }
