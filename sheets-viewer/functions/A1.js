@@ -69,7 +69,9 @@ function addSharedComponents(html, components) {
 function error(message,status){return new Response(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sheet preview</title></head><body style="font:16px/1.6 system-ui;padding:24px;max-width:650px;margin:auto"><p>${message}</p></body></html>`,{status,headers});}
 
 export async function onRequestGet({request}){
-  const params=new URL(request.url).searchParams;
+  const requestUrl = new URL(request.url);
+  const dedicated = requestUrl.hostname === 'live.ends.at';
+  const params=requestUrl.searchParams;
   const id=params.get('id')||params.get('ID')||'';
   if(!/^[a-zA-Z0-9_-]{20,}$/.test(id))return error('Use /a1?id=YOUR_SHEET_ID to preview the HTML or Markdown in cell A1.',400);
   const gid=params.get('gid');
@@ -97,9 +99,12 @@ export async function onRequestGet({request}){
     const revision=[...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
     if(params.get('live')==='check')return Response.json({revision},{headers:{'cache-control':'no-store','access-control-allow-origin':'*'}});
     const slug=params.has('slug')?normalizeSlug(params.get('slug')):null;
-    let pages=new Map();try{pages=pagesFromTable({rows:rows.map(row=>({c:row.slice(0,2).map(v=>({v}))}))});}catch{if(slug!==null)return error('Page slugs must be valid and unique in column B.',400);}
-    if(slug!==null&&!pages.has(slug))return error('This page slug was not found in column B.',404);
-    const content=slug===null?(rows[0]?.[0]||''):pages.get(slug).content;
+    let pages=new Map();try{pages=pagesFromTable({rows:rows.map(row=>({c:row.slice(0,2).map(v=>({v}))}))});}catch{if(!dedicated&&slug!==null)return error('Page slugs must be valid and unique in column B.',400);}
+    if(!dedicated&&slug!==null&&!pages.has(slug))return error('This page slug was not found in column B.',404);
+    const pathSlug = params.get('slug');
+    const content = dedicated
+      ? rows.find(([, name = '']) => name.trim().replace(/^\/+|\/+$/g, '') === pathSlug || (pathSlug === 'home' && /^\/+$/g.test(name.trim())))?.[0] ?? ''
+      : slug===null?(rows[0]?.[0]||''):pages.get(slug).content;
     if(!content.trim())return error('A1 is empty. Put HTML or Markdown in A1, then refresh this page.',404);
     const redirect=getRedirectUrl(content);
     if(redirect)return new Response(null,{status:302,headers:{...headers,location:redirect}});
@@ -118,7 +123,8 @@ export async function onRequestGet({request}){
       items.splice(copyIndex<0?0:copyIndex+1,0,{label:'Edit Sheet',href:editUrl.href});
     }
     const utilityScriptUrl=new URL('/utility-client.js',request.url);utilityScriptUrl.searchParams.set('v','20261105-1000ms');
-    let html=injectUtilityMenu(addSharedComponents(addTheme(getRenderableHtml(content),css),components),{source:content,items,scriptUrl:utilityScriptUrl.href});
+    let html=addSharedComponents(addTheme(getRenderableHtml(content),css),components);
+    if (!dedicated) html=injectUtilityMenu(html,{source:content,items,scriptUrl:utilityScriptUrl.href});
     if(params.get('live')!=='0'){
       const checkUrl=new URL(request.url);checkUrl.searchParams.set('live','check');
       const config=JSON.stringify({revision,checkUrl:checkUrl.href}).replace(/</g,'\\u003c');
