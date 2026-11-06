@@ -88,13 +88,14 @@ test('ends.at collections create stable post routes, optional templates and hidd
         ['home', '<h1>Old home slug</h1>', 'Show'],
         ['secret', '<h1>Hidden page</h1>', 'Hide'],
         ['about ends', '<h1>Named page</h1>'],
-        ['posts', postsPage, 'Show']
+        ['posts', postsPage, 'Show'],
+        ['404', '<h1>Custom missing page</h1>', 'Show']
       ]));
       case '200': return new Response(csv([
-        ['Visibility', 'Name', 'Content'],
-        ['Show', 'post1', 'This is a post'],
-        ['Show', 'another post', secondPost],
-        [false, 'secret-post', 'Hidden post'],
+        ['Hidden', 'Name', 'Content'],
+        [false, 'post1', 'This is a post'],
+        [false, 'another post', secondPost],
+        [true, 'secret-post', 'Hidden post'],
         ['', 'a third post', '<article><h2>A Third Post</h2></article>']
       ]));
       case '990299918': return new Response(csv([
@@ -121,7 +122,11 @@ test('ends.at collections create stable post routes, optional templates and hidd
     assert.doesNotMatch(root, /Old home slug|secret|Hidden component|color: red/);
     assert.match(root, /Visible component/);
     assert.match(root, /range=B5/);
-    assert.equal((await view('/secret')).status, 404);
+    for (const path of ['/secret', '/posts/secret-post', '/404']) {
+      const missing = await view(path);
+      assert.equal(missing.status, 404);
+      assert.match(await missing.text(), /<h1>Custom missing page<\/h1>/);
+    }
     assert.equal((await view('/posts/secret-post')).status, 404);
     assert.match(await (await view('/home')).text(), /Old home slug/);
     assert.match(await (await view('/about-ends')).text(), /Named page/);
