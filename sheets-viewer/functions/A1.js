@@ -61,7 +61,7 @@ function contentTable(rows) {
   }
   return {
     column,
-    rows: rows.map((row, index) => index === 0 || /^hide$/i.test(row[visibility]?.trim() || '')
+    rows: rows.map((row, index) => index === 0 || /^(?:false|hide)$/i.test(row[visibility]?.trim() || '')
       ? []
       : [row[content] || '', row[name] || ''])
   };
