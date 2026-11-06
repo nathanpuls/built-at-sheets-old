@@ -79,7 +79,8 @@ function siteSettings(rows) {
   return {
     logo: values.get('logo') || values.get('favicon') || '',
     name: values.get('site-name') || '',
-    description: values.get('seo-description') || ''
+    description: values.get('seo-description') || '',
+    homepage: values.get('homepage') || ''
   };
 }
 
@@ -148,7 +149,7 @@ export async function onRequestGet({request}){
     }
     const tabs = await sheetTabs(id);
     const sourceGid = gid ?? (dedicated ? tabs.find(tab => tab.name === 'Pages')?.gid : tabs[0]?.gid);
-    const rows = await sheetRows(id, sourceGid ?? null, dedicated ? 'A:C' : 'A:B').catch(() => null);
+    const rows = await sheetRows(id, sourceGid ?? null, 'A:B').catch(() => null);
     if (!rows) return error('Could not read A1. Share the Google Sheet as “Anyone with the link can view,” then refresh.',502);
     const [themeRows, settingsRows, sharedRows] = await Promise.all([
       optionalTabRows(id, tabs, 'theme', 'A1'),
@@ -174,7 +175,7 @@ export async function onRequestGet({request}){
     const hasPageHeader = dedicated && /^page$/i.test(rows[0]?.[1]?.trim() ?? '');
     const pageRows = hasPageHeader ? rows.slice(1) : rows;
     const pageSlug = name => name.trim().replace(/^\/+|\/+$/g, '');
-    const selectedHome = hasPageHeader ? pageSlug(rows[0][2] ?? '') : '';
+    const selectedHome = dedicated ? pageSlug(settings.homepage) : '';
     const homeIndex = selectedHome
       ? pageRows.findIndex(([, name = '']) => pageSlug(name) === selectedHome)
       : -1;
