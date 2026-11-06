@@ -55,6 +55,7 @@ function contentTable(rows) {
   const name = headers.findIndex(value => /^(?:name|page|slug|(?:post )?title)$/.test(value));
   if (content < 0 || name < 0) return {rows, column: 'A'};
   const visibility = headers.indexOf('visibility');
+  const scope = headers.indexOf('scope');
   let column = '';
   for (let index = content + 1; index > 0; index = Math.floor((index - 1) / 26)) {
     column = String.fromCharCode(65 + (index - 1) % 26) + column;
@@ -63,8 +64,17 @@ function contentTable(rows) {
     column,
     rows: rows.map((row, index) => index === 0 || /^(?:false|hide)$/i.test(row[visibility]?.trim() || '')
       ? []
-      : [row[content] || '', row[name] || ''])
+      : [row[content] || '', row[name] || '', row[scope]?.trim().toLowerCase()])
   };
+}
+
+function expandSharedComponents(html, components, stack = []) {
+  return html.replace(/<component\s+name\s*=\s*(?:"([^"]+)"|'([^']+)')\s*>\s*<\/component\s*>/gi, (_, double, single) => {
+    const name = (double || single).trim().toLowerCase();
+    if (stack.includes(name)) throw new Error('Circular Shared component: ' + [...stack, name].join(' → '));
+    if (!components.has(name)) throw new Error('Unknown Shared component: ' + name);
+    return expandSharedComponents(components.get(name), components, [...stack, name]);
+  });
 }
 
 function addTheme(html, css) {
@@ -243,7 +253,8 @@ export async function onRequestGet({request}){
       code.trim() && name.trim() && !(index === 0 && /^(?:code|content)$/i.test(code.trim()) && /^name$/i.test(name.trim())));
     const isCss = ([, name]) => name.trim().toLowerCase() === 'css';
     const css = [themeRows[0]?.[0] ?? '', ...shared.filter(isCss).map(([code]) => code)].filter(Boolean).join('\n');
-    const components = shared.filter(row => !isCss(row)).map(([code]) => code);
+    const named = new Map(shared.filter(([, , scope]) => scope === 'component').map(([code, name]) => [name.trim().toLowerCase(), code]));
+    const components = shared.filter(row => !isCss(row) && row[2] !== 'component').map(([code]) => expandSharedComponents(code, named));
     const [menuLabel = '', menuValue = ''] = settingsRows[0] ?? [];
     const hideMenu = menuLabel.trim().toLowerCase() === 'show default menu'
       && /^(?:false|off|no|0)$/i.test(menuValue.trim());
@@ -284,6 +295,7 @@ export async function onRequestGet({request}){
     const collectionRevision = [];
     if (dedicated && pageIndex >= 0) {
       const parent = pageSlug(pageRows[pageIndex]?.[1] || '');
+      content = expandSharedComponents(content, named);
       const sourceNames = collectionSourceNames(content);
       const conventional = tabs.find(tab => tab.name.toLowerCase() === parent.split('/').at(-1)?.toLowerCase());
       if (conventional && !sourceNames.some(name => name.toLowerCase() === conventional.name.toLowerCase())) sourceNames.push(conventional.name);
@@ -302,8 +314,8 @@ export async function onRequestGet({request}){
           .map(item => ({collection, item})));
         if (!matches.length) return error('This collection item was not found.', 404);
         if (matches.length > 1) return error(`More than one collection item uses the URL slug “${detailSlug}”.`, 400);
-        content = matches[0].item.content;
-        sourceContent = content;
+        sourceContent = matches[0].item.content;
+        content = expandCollectionTags(expandSharedComponents(sourceContent, named), collections);
         activeGid = matches[0].collection.gid;
         activeIndex = matches[0].item.rowIndex;
         activeColumn = matches[0].collection.column;
@@ -311,7 +323,7 @@ export async function onRequestGet({request}){
         content = expandCollectionTags(content, collections);
       }
     }
-    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([rows, css, hideMenu, components, settings, collectionRevision])));
+    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([rows, css, hideMenu, components, settings, collectionRevision, content])));
     const revision=[...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
     if(params.get('live')==='check')return Response.json({revision},{headers:{'cache-control':'no-store','access-control-allow-origin':'*'}});
     if(!content.trim())return error('A1 is empty. Put HTML or Markdown in A1, then refresh this page.',404);
