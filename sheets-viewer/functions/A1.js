@@ -259,6 +259,14 @@ export async function onRequestGet({request}){
     const css = [themeRows[0]?.[0] ?? '', ...shared.filter(isCss).map(([code]) => code)].filter(Boolean).join('\n');
     const named = new Map(shared.filter(([, , scope]) => scope === 'component').map(([code, name]) => [name.trim().toLowerCase(), code]));
     const components = shared.filter(row => !isCss(row) && row[2] !== 'component').map(([code]) => expandSharedComponents(code, named));
+    if (dedicated && params.get('debug') === 'components') {
+      return Response.json({
+        sharedRows: shared.length,
+        globalComponents: shared.filter(row => !isCss(row) && row[2] !== 'component').map(([code, name]) => ({name, length:code.length, hasMenu:code.includes('id="ends-menu"')})),
+        namedComponents: [...named.keys()],
+        quickNavPresent: components.some(code => code.includes('id="ends-menu"'))
+      }, {headers:{'cache-control':'no-store'}});
+    }
     const [menuLabel = '', menuValue = ''] = settingsRows[0] ?? [];
     const hideMenu = menuLabel.trim().toLowerCase() === 'show default menu'
       && /^(?:false|off|no|0)$/i.test(menuValue.trim());
