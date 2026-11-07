@@ -225,7 +225,7 @@ async function previewLogo(value, method) {
     'content-type':type,
     'cache-control':'no-store',
     'x-content-type-options':'nosniff',
-    'content-security-policy':"sandbox; default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com"
+    'content-security-policy':"sandbox; default-src 'none'; style-src 'unsafe-inline'"
   }});
 }
 
