@@ -256,8 +256,8 @@ export async function onRequestGet({request}){
     const shared = (dedicated ? contentTable(sharedRows).rows : sharedRows).filter(([code = '', name = ''], index) =>
       code.trim() && name.trim() && !(index === 0 && /^(?:code|content)$/i.test(code.trim()) && /^name$/i.test(name.trim())));
     const isCss = ([, name]) => name.trim().toLowerCase() === 'css';
-    const css = [themeRows[0]?.[0] ?? '', ...shared.filter(isCss).map(([code]) => code)].filter(Boolean).join('\n');
     const named = new Map(shared.filter(([, , scope]) => scope === 'component').map(([code, name]) => [name.trim().toLowerCase(), code]));
+    const css = expandSharedComponents([themeRows[0]?.[0] ?? '', ...shared.filter(isCss).map(([code]) => code)].filter(Boolean).join('\n'), named);
     const components = [...new Set(shared.filter(row => !isCss(row) && row[2] !== 'component').map(([, name]) => name.trim().toLowerCase()))]
       .map(name => shared.find(row => row[1].trim().toLowerCase() === name))
       .map(([code]) => expandSharedComponents(code, named));
