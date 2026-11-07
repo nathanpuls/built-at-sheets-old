@@ -72,10 +72,10 @@ function contentTable(rows) {
 }
 
 function expandSharedComponents(html, components, stack = []) {
-  // Support both {{name}} and the original <component name="name"></component>.
-  // Unknown {{variables}} remain untouched for collection rendering.
-  return html.replace(/{{\s*([a-z][a-z0-9_-]*)\s*}}|<component\s+name=["']([a-z][a-z0-9_-]*)["']\s*><\/component>/gi, (match, curlyName, tagName) => {
-    const name = (curlyName || tagName).toLowerCase();
+  // Shared components use only {{name}} syntax.
+  // Unknown placeholders remain untouched for collection rendering.
+  return html.replace(/{{\s*([a-z][a-z0-9_-]*)\s*}}/gi, (match, rawName) => {
+    const name = rawName.toLowerCase();
     if (!components.has(name)) return match;
     if (stack.includes(name)) throw new Error('Circular Shared component: ' + [...stack, name].join(' → '));
     return expandSharedComponents(components.get(name), components, [...stack, name]);
@@ -258,7 +258,9 @@ export async function onRequestGet({request}){
     const isCss = ([, name]) => name.trim().toLowerCase() === 'css';
     const css = [themeRows[0]?.[0] ?? '', ...shared.filter(isCss).map(([code]) => code)].filter(Boolean).join('\n');
     const named = new Map(shared.filter(([, , scope]) => scope === 'component').map(([code, name]) => [name.trim().toLowerCase(), code]));
-    const components = shared.filter(row => !isCss(row) && row[2] !== 'component').map(([code]) => expandSharedComponents(code, named));
+    const components = [...new Set(shared.filter(row => !isCss(row) && row[2] !== 'component').map(([, name]) => name.trim().toLowerCase()))]
+      .map(name => shared.find(row => row[1].trim().toLowerCase() === name))
+      .map(([code]) => expandSharedComponents(code, named));
     if (dedicated && params.get('debug') === 'components') {
       return Response.json({
         sharedRows: shared.length,
