@@ -72,9 +72,10 @@ function contentTable(rows) {
 }
 
 function expandSharedComponents(html, components, stack = []) {
-  // Only expand names defined in Shared; leave other {{variables}} intact.
-  return html.replace(/{{\s*([a-z][a-z0-9_-]*)\s*}}/gi, (match, key) => {
-    const name = key.toLowerCase();
+  // Support both {{name}} and the original <component name="name"></component>.
+  // Unknown {{variables}} remain untouched for collection rendering.
+  return html.replace(/{{\s*([a-z][a-z0-9_-]*)\s*}}|<component\s+name=["']([a-z][a-z0-9_-]*)["']\s*><\/component>/gi, (match, curlyName, tagName) => {
+    const name = (curlyName || tagName).toLowerCase();
     if (!components.has(name)) return match;
     if (stack.includes(name)) throw new Error('Circular Shared component: ' + [...stack, name].join(' → '));
     return expandSharedComponents(components.get(name), components, [...stack, name]);
