@@ -72,14 +72,14 @@ function contentTable(rows) {
 }
 
 function expandSharedComponents(html, components, stack = []) {
-  return html.replace(/<component\s+name\s*=\s*(?:"([^"]+)"|'([^']+)')\s*>\s*<\/component\s*>/gi, (_, double, single) => {
-    const name = (double || single).trim().toLowerCase();
+  // Only expand names defined in Shared; leave other {{variables}} intact.
+  return html.replace(/{{\s*([a-z][a-z0-9_-]*)\s*}}/gi, (match, key) => {
+    const name = key.toLowerCase();
+    if (!components.has(name)) return match;
     if (stack.includes(name)) throw new Error('Circular Shared component: ' + [...stack, name].join(' → '));
-    if (!components.has(name)) throw new Error('Unknown Shared component: ' + name);
     return expandSharedComponents(components.get(name), components, [...stack, name]);
   });
 }
-
 function addTheme(html, css) {
   if (!css.trim()) return html;
   // Keep literal closing style tags in CSS from becoming HTML markup.
