@@ -224,7 +224,7 @@ function escapeHtml(value){return String(value).replace(/[&<>"']/g,c=>({'&':'&am
       margin: 0;
       background: #ffffff;
       color: #111827;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: inherit;
       letter-spacing: 0;
       -webkit-font-smoothing: antialiased;
       text-rendering: optimizeLegibility;
