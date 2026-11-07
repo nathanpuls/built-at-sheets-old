@@ -56,7 +56,8 @@ function contentTable(rows) {
   if (content < 0 || name < 0) return {rows, column: 'A'};
   const hidden = headers.indexOf('hidden');
   const visibility = headers.indexOf('visibility');
-  const scope = headers.indexOf('scope');
+  const global = headers.indexOf('global');
+  const scope = headers.indexOf('scope'); // Legacy sheets
   let column = '';
   for (let index = content + 1; index > 0; index = Math.floor((index - 1) / 26)) {
     column = String.fromCharCode(65 + (index - 1) % 26) + column;
@@ -67,7 +68,9 @@ function contentTable(rows) {
         ? /^true$/i.test(row[hidden]?.trim() || '')
         : /^(?:false|hide)$/i.test(row[visibility]?.trim() || ''))
       ? []
-      : [row[content] || '', row[name] || '', row[scope]?.trim().toLowerCase()])
+      : [row[content] || '', row[name] || '', global >= 0
+          ? (/^true$/i.test(row[global]?.trim() || '') ? 'global' : 'component')
+          : row[scope]?.trim().toLowerCase()])
   };
 }
 
